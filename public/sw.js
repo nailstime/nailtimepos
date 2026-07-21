@@ -1,7 +1,8 @@
-const CACHE_NAME = 'nailtime-pos-shell-v1'
+const CACHE_NAME = 'nailtime-pos-shell-v2'
 const APP_SHELL = [
   '/',
   '/index.html',
+  '/display.html',
   '/manifest.webmanifest',
   '/display-manifest.webmanifest',
   '/icons/nailtime-mark.svg',

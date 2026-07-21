@@ -53,15 +53,6 @@ export default function CustomerDisplay() {
     window.history.replaceState(window.history.state, '', `/display?counter=${encodeURIComponent(scannedCounterCode)}`)
   }, [scannedCounterCode, scannedDisplayToken])
 
-  useEffect(() => {
-    const manifest = document.querySelector('link[rel="manifest"]')
-    const originalHref = manifest?.getAttribute('href')
-    manifest?.setAttribute('href', '/display-manifest.webmanifest')
-    return () => {
-      if (originalHref) manifest?.setAttribute('href', originalHref)
-    }
-  }, [])
-
   const load = useCallback(async () => {
     if (!displayToken) { setAuthorized(false); return }
     const { data, error } = await supabase.rpc('get_customer_display', {
