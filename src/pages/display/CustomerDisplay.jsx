@@ -6,12 +6,38 @@ import { baht } from '../../lib/format'
 import { AlertMark, BrandMark, CheckMark } from '../../components/Brand.jsx'
 
 const CUSTOMER_DISPLAY_BUCKET = 'customer-display-media'
+const DISPLAY_CREDENTIAL_STORAGE_KEY = 'nailtime-customer-display-credential'
+
+function readStoredDisplayCredential() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(DISPLAY_CREDENTIAL_STORAGE_KEY) || 'null')
+    if (stored && typeof stored.counterCode === 'string' && typeof stored.displayToken === 'string' && stored.displayToken) {
+      return stored
+    }
+  } catch {}
+  return null
+}
+
+function storeDisplayCredential(credential) {
+  try { window.localStorage.setItem(DISPLAY_CREDENTIAL_STORAGE_KEY, JSON.stringify(credential)) } catch {}
+}
+
+function clearStoredDisplayCredential() {
+  try { window.localStorage.removeItem(DISPLAY_CREDENTIAL_STORAGE_KEY) } catch {}
+}
 
 // ใช้ token ประจำจอใน URL fragment เพื่อไม่ให้ token ถูกส่งไปยัง web server/log:
 // /display?counter=C1#token=<DISPLAY_TOKEN>
 export default function CustomerDisplay() {
-  const counterCode = new URLSearchParams(location.search).get('counter') || 'C1'
-  const displayToken = new URLSearchParams(location.hash.slice(1)).get('token') || ''
+  const scannedCounterCode = (new URLSearchParams(location.search).get('counter') || 'C1').toUpperCase()
+  const scannedDisplayToken = new URLSearchParams(location.hash.slice(1)).get('token') || ''
+  const [credential, setCredential] = useState(() => (
+    scannedDisplayToken
+      ? { counterCode: scannedCounterCode, displayToken: scannedDisplayToken }
+      : readStoredDisplayCredential()
+  ))
+  const counterCode = credential?.counterCode || scannedCounterCode
+  const displayToken = credential?.displayToken || ''
   const [branch, setBranch] = useState(null)
   const [order, setOrder] = useState(null)
   const [items, setItems] = useState([])
@@ -19,13 +45,35 @@ export default function CustomerDisplay() {
   const [campaign, setCampaign] = useState(null)
   const [authorized, setAuthorized] = useState(null)
 
+  useEffect(() => {
+    if (!scannedDisplayToken) return
+    const nextCredential = { counterCode: scannedCounterCode, displayToken: scannedDisplayToken }
+    storeDisplayCredential(nextCredential)
+    setCredential(nextCredential)
+    window.history.replaceState(window.history.state, '', `/display?counter=${encodeURIComponent(scannedCounterCode)}`)
+  }, [scannedCounterCode, scannedDisplayToken])
+
+  useEffect(() => {
+    const manifest = document.querySelector('link[rel="manifest"]')
+    const originalHref = manifest?.getAttribute('href')
+    manifest?.setAttribute('href', '/display-manifest.webmanifest')
+    return () => {
+      if (originalHref) manifest?.setAttribute('href', originalHref)
+    }
+  }, [])
+
   const load = useCallback(async () => {
     if (!displayToken) { setAuthorized(false); return }
     const { data, error } = await supabase.rpc('get_customer_display', {
       p_counter_code: counterCode,
       p_display_token: displayToken,
     })
-    if (error || !data) { setAuthorized(false); return }
+    if (error || !data) {
+      clearStoredDisplayCredential()
+      setCredential(null)
+      setAuthorized(false)
+      return
+    }
     setAuthorized(true)
     setBranch(data.branch || null)
     setOrder(data.order || null)
@@ -45,7 +93,7 @@ export default function CustomerDisplay() {
       <div className="card max-w-md p-8 text-center">
         <AlertMark className="mx-auto" />
         <p className="mt-5 font-display text-2xl font-semibold">จอลูกค้ายังไม่ได้รับอนุญาต</p>
-        <p className="mt-2 text-sm leading-6 text-sagegray">ตรวจ counter และ display token ใน URL ของเครื่องนี้</p>
+        <p className="mt-2 text-sm leading-6 text-sagegray">สแกน QR ของ Counter นี้อีกครั้ง หรือติดต่อ Owner เพื่อสร้าง QR ใหม่</p>
       </div>
     </Screen>
   )

@@ -3,6 +3,7 @@ const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/display-manifest.webmanifest',
   '/icons/nailtime-mark.svg',
   '/icons/nailtime-mark-maskable.svg',
 ]
@@ -37,7 +38,7 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (!url.pathname.startsWith('/assets/') && !url.pathname.startsWith('/icons/') && url.pathname !== '/manifest.webmanifest') return
+  if (!url.pathname.startsWith('/assets/') && !url.pathname.startsWith('/icons/') && !url.pathname.endsWith('-manifest.webmanifest')) return
 
   event.respondWith(
     caches.match(request).then((cached) => cached || fetch(request).then((response) => {

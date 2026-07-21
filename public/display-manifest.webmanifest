@@ -1,0 +1,26 @@
+{
+  "id": "/display",
+  "name": "Nail Time Customer Display",
+  "short_name": "Nail Time Display",
+  "description": "จอแสดงรายการและ QR ชำระเงินสำหรับลูกค้า Nail Time & Spa",
+  "lang": "th",
+  "start_url": "/display",
+  "scope": "/display",
+  "display": "fullscreen",
+  "background_color": "#fbf8f6",
+  "theme_color": "#b45266",
+  "icons": [
+    {
+      "src": "/icons/nailtime-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/nailtime-mark-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
