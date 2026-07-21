@@ -431,6 +431,7 @@ export default function PosScreen() {
     onPending: () => navigate('/pos/pending'),
     pendingActive: pendingView,
     onCustomers: () => navigate('/pos/customers'),
+    onAdmin: staff.role === 'owner' ? () => navigate('/admin') : null,
   }
 
   if (restoringCounter) return (
@@ -737,13 +738,22 @@ function formatPendingTime(value) {
 function Center({ children }) {
   return <div className="card mx-auto mt-10 max-w-lg p-6 text-center sm:p-9">{children}</div>
 }
-function Shell({ staff, logout, pendingCount = 0, onPending, pendingActive = false, onCustomers, children }) {
+function Shell({ staff, logout, pendingCount = 0, onPending, pendingActive = false, onCustomers, onAdmin, children }) {
   return (
     <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(169,79,97,0.07),_transparent_32%),#f7f4f2]">
       <header className="sticky top-0 z-20 border-b border-mist bg-white/90 backdrop-blur-xl">
         <div className="page-shell flex min-h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <BrandMark compact />
           <div className="flex items-center gap-2">
+            {onAdmin && (
+              <button
+                onClick={onAdmin}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-rose/20 bg-rose/10 px-3 text-sm font-semibold text-rosedeep transition hover:bg-rose hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
+              >
+                <SettingsIcon />
+                <span className="hidden sm:inline">หลังร้าน</span>
+              </button>
+            )}
             <button
               onClick={onCustomers}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
@@ -779,6 +789,10 @@ function ReceiptIcon() {
 
 function CustomerIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" /></svg>
+}
+
+function SettingsIcon() {
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.04 1.56v.08h-3v-.08A1.7 1.7 0 0 0 10.66 18.66a1.7 1.7 0 0 0-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 0 0 7 15a1.7 1.7 0 0 0-1.56-1.04h-.08v-3h.08A1.7 1.7 0 0 0 7 9.92a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 11.7 4.7v-.08h3v.08a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.12 2.12-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.04h.08v3h-.08A1.7 1.7 0 0 0 19.4 15Z" /></svg>
 }
 
 function PrinterIcon() {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { BrandMark } from '../components/Brand.jsx'
@@ -7,6 +7,8 @@ export default function PinLogin() {
   const [pin, setPin] = useState('')
   const [err, setErr] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const pinRef = useRef('')
+  const submittingRef = useRef(false)
   const { staff, loginWithPin } = useAuth()
   const nav = useNavigate()
   const location = useLocation()
@@ -23,23 +25,49 @@ export default function PinLogin() {
   }, [staff, nav, location.state])
 
   async function press(d) {
-    if (submitting) return
+    if (submittingRef.current) return
     setErr('')
-    if (d === 'del') return setPin(pin.slice(0, -1))
-    const next = (pin + d).slice(0, 6)
+    if (d === 'del') {
+      const next = pinRef.current.slice(0, -1)
+      pinRef.current = next
+      setPin(next)
+      return
+    }
+    const next = (pinRef.current + d).slice(0, 6)
+    pinRef.current = next
     setPin(next)
     if (next.length === 6) {
+      submittingRef.current = true
       setSubmitting(true)
       try {
         await loginWithPin(next)
       } catch (e) {
         setErr(e.message)
+        pinRef.current = ''
         setPin('')
       } finally {
+        submittingRef.current = false
         setSubmitting(false)
       }
     }
   }
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (submitting || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return
+
+      if (/^\d$/.test(event.key)) {
+        event.preventDefault()
+        press(event.key)
+      } else if (event.key === 'Backspace') {
+        event.preventDefault()
+        press('del')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const keys = ['1','2','3','4','5','6','7','8','9','','0','del']
   return (
@@ -73,6 +101,7 @@ export default function PinLogin() {
               </div>
               <span className="text-xs font-semibold text-sagegray">{pin.length}/6</span>
             </div>
+            <p className="-mt-4 mb-5 text-center text-xs text-sagegray">ใช้แป้นตัวเลขบนคีย์บอร์ดได้ · Backspace เพื่อลบ</p>
             {err && <p role="alert" className="mb-4 rounded-xl border border-danger/15 bg-danger/5 px-4 py-3 text-sm font-medium text-danger">{err}</p>}
             <div className="grid grid-cols-3 gap-3">
               {keys.map((k, i) =>
