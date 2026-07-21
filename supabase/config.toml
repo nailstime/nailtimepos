@@ -1,0 +1,8 @@
+[functions.line-member]
+verify_jwt = false
+
+[functions.line-notify]
+verify_jwt = true
+
+[functions.line-redeem]
+verify_jwt = true

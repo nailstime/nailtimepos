@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --color-porcelain: #f7f4f2;
+    --color-blush: #eadbd9;
+    --color-rose: #a94f61;
+    --color-rose-deep: #7d3546;
+    --color-ink: #261b1f;
+    --color-sage-gray: #70686b;
+    --color-mist: #eeeae7;
+    --color-success: #31705a;
+    --color-danger: #a13f50;
+    --shadow-panel: 0 1px 2px rgb(38 27 31 / 0.04), 0 12px 32px rgb(68 47 53 / 0.06);
+  }
+  html { background-color: var(--color-porcelain); }
+  body { @apply min-h-screen antialiased; font-family: "Noto Sans Thai", system-ui, sans-serif; background-color: var(--color-porcelain); color: var(--color-ink); }
+  button, a, input, select { -webkit-tap-highlight-color: transparent; }
+  button, a { touch-action: manipulation; }
+  ::selection { background-color: rgb(169 79 97 / 0.2); color: var(--color-ink); }
+}
+
+@layer components {
+  .btn { @apply inline-flex min-h-11 select-none items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold leading-none transition duration-200 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40; }
+  .btn-rose { @apply inline-flex min-h-11 select-none items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold leading-none text-white shadow-sm transition duration-200 ease-out hover:shadow-md active:translate-y-px focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40; background-color: var(--color-rose); }
+  .btn-rose:hover { background-color: var(--color-rose-deep); }
+  .btn-ghost { @apply inline-flex min-h-11 select-none items-center justify-center rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold leading-none shadow-sm transition duration-200 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40; border-color: var(--color-mist); color: var(--color-ink); }
+  .btn-ghost:hover { border-color: var(--color-blush); background-color: rgb(234 219 217 / 0.3); }
+  .btn-ghost:active { background-color: rgb(234 219 217 / 0.5); }
+  .btn-danger { @apply inline-flex min-h-11 select-none items-center justify-center rounded-xl border px-4 py-2.5 text-sm font-semibold leading-none transition duration-200 ease-out focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40; border-color: rgb(161 63 80 / 0.2); background-color: rgb(161 63 80 / 0.05); color: var(--color-danger); }
+  .btn-danger:hover { background-color: rgb(161 63 80 / 0.1); }
+  .btn:focus-visible, .btn-rose:focus-visible, .btn-ghost:focus-visible { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-rose); }
+  .btn-danger:focus-visible { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-danger); }
+  .card { @apply rounded-2xl border bg-white; border-color: var(--color-mist); box-shadow: var(--shadow-panel); }
+  .input { @apply min-h-11 w-full rounded-xl border bg-white px-3.5 py-2.5 text-base shadow-sm outline-none transition md:text-sm; border-color: var(--color-mist); color: var(--color-ink); }
+  .input::placeholder { color: rgb(112 104 107 / 0.65); }
+  .input:focus { border-color: rgb(169 79 97 / 0.6); box-shadow: 0 0 0 4px rgb(169 79 97 / 0.1); }
+  .page-shell { @apply mx-auto w-full max-w-[1600px]; }
+  .page-heading { @apply mb-5 flex flex-col gap-2 sm:mb-6 sm:flex-row sm:items-end sm:justify-between; }
+  .page-eyebrow { @apply text-xs font-bold uppercase tracking-[0.16em]; color: var(--color-rose); }
+  .page-title { @apply mt-1 text-2xl font-semibold tracking-tight sm:text-3xl; font-family: "Noto Serif Thai", serif; color: var(--color-ink); }
+  .page-description { @apply mt-1 max-w-2xl text-sm leading-6; color: var(--color-sage-gray); }
+  .section-title { @apply text-base font-bold; color: var(--color-ink); }
+  .section-note { @apply mt-1 text-sm leading-5; color: var(--color-sage-gray); }
+  .soft-panel { @apply rounded-2xl border; border-color: rgb(234 219 217 / 0.7); background-color: rgb(234 219 217 / 0.25); }
+  .badge, .badge-rose, .badge-neutral, .badge-success { @apply inline-flex min-h-7 items-center rounded-full border px-2.5 py-1 text-xs font-semibold; }
+  .badge-rose { border-color: rgb(169 79 97 / 0.15); background-color: rgb(169 79 97 / 0.1); color: var(--color-rose-deep); }
+  .badge-neutral { border-color: var(--color-mist); background-color: var(--color-porcelain); color: var(--color-sage-gray); }
+  .badge-success { border-color: rgb(49 112 90 / 0.15); background-color: rgb(49 112 90 / 0.1); color: var(--color-success); }
+  .data-row { @apply grid min-h-12 items-center gap-3 border-b py-2.5 last:border-b-0; border-color: rgb(238 234 231 / 0.8); }
+  .empty-state { @apply rounded-xl border border-dashed px-4 py-8 text-center text-sm; border-color: var(--color-blush); background-color: rgb(247 244 242 / 0.7); color: var(--color-sage-gray); }
+  .admin-nav { @apply flex min-h-11 shrink-0 items-center rounded-xl px-3.5 text-sm font-semibold transition hover:bg-white/70 lg:w-full; color: var(--color-sage-gray); }
+  .admin-nav:hover { color: var(--color-ink); }
+  .admin-nav-active { @apply flex min-h-11 shrink-0 items-center rounded-xl bg-white px-3.5 text-sm font-semibold shadow-sm ring-1 ring-black/5 transition hover:bg-white/70 lg:w-full; color: var(--color-rose-deep); }
+  .admin-nav-active:hover { color: var(--color-ink); }
+}
+
+/* Fallback utility: keeps JSX borders working even while Vite holds an older
+   Tailwind config in memory. Tailwind generates the same class after restart. */
+.border-mist { border-color: var(--color-mist); }
+
+.brand-lockup { @apply flex items-center gap-3; }
+.brand-symbol { @apply grid h-10 w-10 shrink-0 place-items-center rounded-2xl; background-color: var(--color-blush); color: var(--color-rose-deep); }
+.brand-symbol svg { width: 25px; height: 25px; stroke: currentColor; stroke-width: 1.7; }
+.brand-symbol-inverse { background: rgba(255,255,255,.12); color: white; }
+.status-icon { @apply inline-grid h-14 w-14 place-items-center rounded-full; }
+.status-icon svg { width: 28px; height: 28px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.status-icon-success { background-color: rgb(49 112 90 / 0.1); color: var(--color-success); }
+.status-icon-danger { background-color: rgb(161 63 80 / 0.1); color: var(--color-danger); }
+.hide-scrollbar { scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes app-dialog-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes app-dialog-panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.app-dialog-backdrop { animation: app-dialog-backdrop-in 160ms ease-out both; }
+.app-dialog-panel { animation: app-dialog-panel-in 220ms ease-out both; }
+.print-only { display: none; }
+
+@media (min-width: 1024px) {
+  .receipt-list-grid {
+    grid-template-columns:
+      minmax(110px, 0.9fr)
+      minmax(150px, 1.05fr)
+      minmax(140px, 1.2fr)
+      96px
+      104px;
+  }
+}
+
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: white !important; }
+  body * { visibility: hidden; }
+  .receipt-paper, .receipt-paper * { visibility: visible; }
+  .receipt-paper {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
