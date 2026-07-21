@@ -7,7 +7,15 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { AlertMark, BrandMark, CheckMark } from '../../components/Brand.jsx'
 import { useAppDialog } from '../../components/AppDialog.jsx'
 
-const COUNTER = 'C1'
+const COUNTER_STORAGE_KEY = 'nailtime-pos-counter'
+
+function getStoredCounter() {
+  try {
+    return window.sessionStorage.getItem(COUNTER_STORAGE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
 
 function catalogPriceLabel(item) {
   if (item.price_mode === 'variable') return `฿${baht(item.min_price)}–${baht(item.max_price)}`
@@ -42,6 +50,78 @@ export default function PosScreen() {
   const [resumeBusy, setResumeBusy] = useState('')
   const [pendingErr, setPendingErr] = useState('')
   const [printBusy, setPrintBusy] = useState(false)
+  const [counterCode, setCounterCode] = useState(getStoredCounter)
+  const [counters, setCounters] = useState([])
+  const [countersLoading, setCountersLoading] = useState(true)
+  const [counterError, setCounterError] = useState('')
+
+  const loadCounters = useCallback(async () => {
+    setCountersLoading(true)
+    const { data, error } = await supabase.rpc('list_pos_counters')
+    if (error) {
+      setCounters([])
+      setCounterError(error.message)
+    } else {
+      setCounters(data || [])
+      setCounterError('')
+    }
+    setCountersLoading(false)
+  }, [])
+
+  useEffect(() => { loadCounters() }, [loadCounters])
+
+  useEffect(() => {
+    if (countersLoading || !counterCode || counters.some((counter) => counter.code === counterCode)) return
+    try { window.sessionStorage.removeItem(COUNTER_STORAGE_KEY) } catch {}
+    setCounterCode('')
+  }, [counterCode, counters, countersLoading])
+
+  function selectCounter(code) {
+    const normalizedCode = String(code || '').toUpperCase()
+    if (!normalizedCode) return
+    try { window.sessionStorage.setItem(COUNTER_STORAGE_KEY, normalizedCode) } catch {}
+    setCounterCode(normalizedCode)
+    setCart([])
+    setMember(null)
+    setPhone('')
+    setOrder(null)
+    setResult(null)
+    setDiscountReq(null)
+    setPendingRedeems(0)
+    setPendingApproval(false)
+    setLinkCode('')
+    setStage('cart')
+    setErr('')
+  }
+
+  async function changeCounter() {
+    const needsConfirmation = cart.length > 0 || order?.status === 'awaiting_payment'
+    if (needsConfirmation) {
+      const confirmed = await openConfirm({
+        title: 'เปลี่ยน Counter',
+        description: order?.status === 'awaiting_payment'
+          ? `บิล ${order.order_no} จะยังค้างอยู่ที่ Counter ${counterCode} และกลับมาจัดการได้ภายหลัง`
+          : 'รายการในบิลที่ยังไม่ได้เปิดจะถูกล้างก่อนเปลี่ยน Counter',
+        cancelLabel: 'อยู่ Counter เดิม',
+        confirmLabel: 'เปลี่ยน Counter',
+      })
+      if (!confirmed) return
+    }
+    try { window.sessionStorage.removeItem(COUNTER_STORAGE_KEY) } catch {}
+    setCounterCode('')
+    setCart([])
+    setMember(null)
+    setPhone('')
+    setOrder(null)
+    setResult(null)
+    setDiscountReq(null)
+    setPendingRedeems(0)
+    setPendingApproval(false)
+    setLinkCode('')
+    setStage('cart')
+    setErr('')
+    loadCounters()
+  }
 
   const applyCounterState = useCallback((state) => {
     const activeOrder = state?.order || null
@@ -78,15 +158,16 @@ export default function PosScreen() {
   }, [])
 
   const restoreCounter = useCallback(async () => {
+    if (!counterCode) return
     setRestoringCounter(true)
     const [{ data, error }] = await Promise.all([
-      supabase.rpc('get_pos_counter_state', { p_counter_code: COUNTER }),
+      supabase.rpc('get_pos_counter_state', { p_counter_code: counterCode }),
       loadPendingOrders(),
     ])
     if (error) setErr(error.message)
     else applyCounterState(data)
     setRestoringCounter(false)
-  }, [applyCounterState, loadPendingOrders])
+  }, [applyCounterState, counterCode, loadPendingOrders])
 
   useEffect(() => {
     ;(async () => {
@@ -101,16 +182,18 @@ export default function PosScreen() {
     })()
   }, [])
 
-  useEffect(() => { restoreCounter() }, [restoreCounter])
+  useEffect(() => {
+    if (counterCode) restoreCounter()
+  }, [counterCode, restoreCounter])
 
   // realtime: redemption ยืนยัน / ส่วนลดอนุมัติ / บิลถูก void
   const refreshOrder = useCallback(async () => {
     if (!order) return
-    const { data, error } = await supabase.rpc('get_pos_counter_state', { p_counter_code: COUNTER })
+    const { data, error } = await supabase.rpc('get_pos_counter_state', { p_counter_code: counterCode })
     if (error) return setErr(error.message)
     applyCounterState(data)
     loadPendingOrders()
-  }, [order?.id, applyCounterState, loadPendingOrders])
+  }, [order?.id, applyCounterState, counterCode, loadPendingOrders])
 
   useEffect(() => {
     if (!order || stage !== 'paying') return
@@ -277,7 +360,7 @@ export default function PosScreen() {
         ...(c.custom_price_reason ? { unit_price: c.price, custom_price_reason: c.custom_price_reason } : {}),
       }))
       const { data, error } = await supabase.rpc('create_order', {
-        p_counter_code: COUNTER,
+        p_counter_code: counterCode,
         p_member: member?.id ?? null,
         p_items: items,
       })
@@ -403,7 +486,7 @@ export default function PosScreen() {
   }
 
   async function newBill() {
-    const { error } = await supabase.rpc('clear_counter', { p_counter_code: COUNTER })
+    const { error } = await supabase.rpc('clear_counter', { p_counter_code: counterCode })
     if (error) return setErr(error.message)
     setCart([]); setMember(null); setPhone(''); setOrder(null)
     setResult(null); setDiscountReq(null); setPendingRedeems(0); setPendingApproval(false); setLinkCode(''); setStage('cart')
@@ -415,7 +498,7 @@ export default function PosScreen() {
     setPendingErr('')
     const { data, error } = await supabase.rpc('resume_pending_pos_order', {
       p_order: pendingOrder.id,
-      p_counter_code: COUNTER,
+      p_counter_code: counterCode,
     })
     setResumeBusy('')
     if (error) return setPendingErr(error.message)
@@ -424,21 +507,40 @@ export default function PosScreen() {
     navigate('/pos')
   }
 
+  async function logoutFromPos() {
+    try { window.sessionStorage.removeItem(COUNTER_STORAGE_KEY) } catch {}
+    await logout()
+  }
+
   const shellProps = {
     staff,
-    logout,
+    logout: logoutFromPos,
+    counterCode,
     pendingCount: pendingOrders.length,
     onPending: () => navigate('/pos/pending'),
     pendingActive: pendingView,
     onCustomers: () => navigate('/pos/customers'),
     onAdmin: staff.role === 'owner' ? () => navigate('/admin') : null,
+    onChangeCounter: changeCounter,
   }
+
+  if (!counterCode || countersLoading) return (
+    <Shell {...shellProps} onPending={null} onCustomers={null} onChangeCounter={null}>
+      <CounterPicker
+        counters={counters}
+        loading={countersLoading}
+        error={counterError}
+        onChoose={selectCounter}
+        onRefresh={loadCounters}
+      />
+    </Shell>
+  )
 
   if (restoringCounter) return (
     <Shell {...shellProps}>
       <div className="card mx-auto mt-10 max-w-lg p-8 text-center">
         <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-blush border-t-rose" aria-hidden="true" />
-        <p className="mt-4 font-semibold">กำลังตรวจสอบบิลของ Counter {COUNTER}</p>
+        <p className="mt-4 font-semibold">กำลังตรวจสอบบิลของ Counter {counterCode}</p>
         <p className="mt-1 text-sm text-sagegray">เพื่อป้องกันการเปิดบิลซ้ำหลังรีเฟรชหน้า</p>
       </div>
     </Shell>
@@ -449,6 +551,7 @@ export default function PosScreen() {
       <PendingOrdersPage
         orders={pendingOrders}
         activeOrder={order}
+        counterCode={counterCode}
         busyId={resumeBusy}
         error={pendingErr}
         onRefresh={loadPendingOrders}
@@ -529,7 +632,7 @@ export default function PosScreen() {
     <Shell {...shellProps}>
       <div className="page-heading">
         <div>
-          <p className="page-eyebrow">Counter {COUNTER}</p>
+          <p className="page-eyebrow">Counter {counterCode}</p>
           <h1 className="page-title">สร้างบิลใหม่</h1>
           <p className="page-description">เลือกบริการหรือสินค้า แล้วตรวจสอบรายการก่อนชำระเงิน</p>
         </div>
@@ -571,7 +674,7 @@ export default function PosScreen() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="section-title">รายการในบิล</p>
-                <p className="section-note">โต๊ะชำระเงิน · {COUNTER}</p>
+                <p className="section-note">โต๊ะชำระเงิน · {counterCode}</p>
               </div>
               <span className="badge-neutral">{cart.length}</span>
             </div>
@@ -643,7 +746,56 @@ export default function PosScreen() {
   )
 }
 
-function PendingOrdersPage({ orders, activeOrder, busyId, error, onRefresh, onResume, onBack }) {
+function CounterPicker({ counters, loading, error, onChoose, onRefresh }) {
+  return (
+    <div className="mx-auto w-full max-w-3xl py-6 sm:py-10">
+      <div className="mb-6 text-center">
+        <p className="page-eyebrow">Point of sale</p>
+        <h1 className="page-title mt-2">เลือก Counter ที่ใช้งาน</h1>
+        <p className="page-description mx-auto mt-2 max-w-xl">เลือก Counter ของเครื่องนี้ก่อนเปิดบิล ระบบจะจำไว้จนกว่าจะออกจากระบบหรือกดเปลี่ยน Counter</p>
+      </div>
+
+      {loading ? (
+        <div className="card grid min-h-52 place-items-center p-8 text-center">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-blush border-t-rose" aria-hidden="true" />
+          <p className="-mt-16 text-sm font-medium text-sagegray">กำลังโหลด Counter</p>
+        </div>
+      ) : error ? (
+        <div className="card p-7 text-center">
+          <AlertMark className="mx-auto" />
+          <h2 className="mt-4 font-display text-2xl font-semibold">โหลด Counter ไม่สำเร็จ</h2>
+          <p className="mt-2 text-sm text-danger">{error}</p>
+          <button onClick={onRefresh} className="btn-ghost mt-5">ลองอีกครั้ง</button>
+        </div>
+      ) : counters.length === 0 ? (
+        <div className="card p-7 text-center">
+          <CounterIcon />
+          <h2 className="mt-4 font-display text-2xl font-semibold">ยังไม่มี Counter</h2>
+          <p className="mt-2 text-sm text-sagegray">ให้ Owner เพิ่ม Counter ใน ตั้งค่าระบบ → สาขาและเคาน์เตอร์ก่อน</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {counters.map((counter) => (
+            <button
+              key={counter.code}
+              onClick={() => onChoose(counter.code)}
+              className="card group min-h-40 p-6 text-left transition hover:-translate-y-0.5 hover:border-rose/35 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose focus-visible:ring-offset-2"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-rose/10 text-rosedeep"><CounterIcon /></span>
+                {counter.has_open_order ? <span className="badge-rose">มีบิลค้าง</span> : <span className="badge-success">พร้อมใช้งาน</span>}
+              </div>
+              <p className="mt-5 font-display text-3xl font-semibold">Counter {counter.code}</p>
+              <p className="mt-1 text-sm text-sagegray">{counter.has_open_order ? `บิล ${counter.active_order_no || 'กำลังรอชำระ'}` : 'แตะเพื่อเริ่มขายที่ Counter นี้'}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PendingOrdersPage({ orders, activeOrder, counterCode, busyId, error, onRefresh, onResume, onBack }) {
   return (
     <div className="w-full">
       <div className="page-heading">
@@ -661,7 +813,7 @@ function PendingOrdersPage({ orders, activeOrder, busyId, error, onRefresh, onRe
       {activeOrder && (
         <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-rose/15 bg-rose/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-bold text-rosedeep">Counter {COUNTER} กำลังใช้งาน</p>
+            <p className="text-sm font-bold text-rosedeep">Counter {counterCode} กำลังใช้งาน</p>
             <p className="mt-1 text-sm text-sagegray">บิล {activeOrder.order_no} · ฿{baht(activeOrder.total)} ต้องจัดการให้เสร็จก่อนเปิดบิลค้างใบอื่น</p>
           </div>
           <button onClick={onBack} className="btn-rose shrink-0">กลับไปรับชำระ</button>
@@ -681,7 +833,7 @@ function PendingOrdersPage({ orders, activeOrder, busyId, error, onRefresh, onRe
         <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {orders.map((pendingOrder) => {
             const isCurrent = pendingOrder.id === activeOrder?.id
-            const linkedElsewhere = pendingOrder.counter_code && pendingOrder.counter_code !== COUNTER
+            const linkedElsewhere = pendingOrder.counter_code && pendingOrder.counter_code !== counterCode
             const counterBusy = Boolean(activeOrder) && !isCurrent
             const disabled = Boolean(busyId) || linkedElsewhere || counterBusy
             return (
@@ -715,7 +867,7 @@ function PendingOrdersPage({ orders, activeOrder, busyId, error, onRefresh, onRe
                           ? `ใช้งานอยู่ที่ ${pendingOrder.counter_code}`
                           : counterBusy
                             ? `จัดการบิล ${activeOrder.order_no} ก่อน`
-                            : `เปิดบิลนี้ที่ ${COUNTER}`}
+                            : `เปิดบิลนี้ที่ ${counterCode}`}
                   </button>
                 </div>
               </article>
@@ -738,13 +890,24 @@ function formatPendingTime(value) {
 function Center({ children }) {
   return <div className="card mx-auto mt-10 max-w-lg p-6 text-center sm:p-9">{children}</div>
 }
-function Shell({ staff, logout, pendingCount = 0, onPending, pendingActive = false, onCustomers, onAdmin, children }) {
+function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendingActive = false, onCustomers, onAdmin, onChangeCounter, children }) {
   return (
     <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(169,79,97,0.07),_transparent_32%),#f7f4f2]">
       <header className="sticky top-0 z-20 border-b border-mist bg-white/90 backdrop-blur-xl">
         <div className="page-shell flex min-h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <BrandMark compact />
           <div className="flex items-center gap-2">
+            {counterCode && onChangeCounter && (
+              <button
+                onClick={onChangeCounter}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
+                aria-label={`เปลี่ยน Counter ปัจจุบัน ${counterCode}`}
+              >
+                <CounterIcon />
+                <span>{counterCode}</span>
+                <span className="hidden lg:inline">เปลี่ยน</span>
+              </button>
+            )}
             {onAdmin && (
               <button
                 onClick={onAdmin}
@@ -754,15 +917,15 @@ function Shell({ staff, logout, pendingCount = 0, onPending, pendingActive = fal
                 <span className="hidden sm:inline">หลังร้าน</span>
               </button>
             )}
-            <button
+            {onCustomers && <button
               onClick={onCustomers}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
               aria-label="ดูข้อมูลลูกค้า"
             >
               <CustomerIcon />
               <span className="hidden sm:inline">ลูกค้า (ทีมบริการ)</span>
-            </button>
-            <button
+            </button>}
+            {onPending && <button
               onClick={onPending}
               className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose ${pendingActive ? 'border-rose/20 bg-rose/10 text-rosedeep' : 'border-mist bg-white text-sagegray hover:border-blush hover:text-ink'}`}
               aria-label={`บิลค้างรับ ${pendingCount} บิล`}
@@ -770,7 +933,7 @@ function Shell({ staff, logout, pendingCount = 0, onPending, pendingActive = fal
               <ReceiptIcon />
               <span className="hidden sm:inline">บิลค้างรับ</span>
               <span className={pendingCount ? 'badge-rose min-h-6 px-2 py-0.5' : 'badge-neutral min-h-6 px-2 py-0.5'}>{pendingCount}</span>
-            </button>
+            </button>}
             <div className="flex items-center gap-1 rounded-xl border border-mist bg-porcelain px-1.5 py-1 text-sm">
               <span className="hidden px-2 font-semibold text-ink sm:block">{staff.name}</span>
               <button onClick={logout} className="min-h-9 rounded-lg px-3 font-medium text-sagegray transition hover:bg-white hover:text-danger">ออก</button>
@@ -789,6 +952,10 @@ function ReceiptIcon() {
 
 function CustomerIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" /></svg>
+}
+
+function CounterIcon() {
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 9h8M8 15h5" /></svg>
 }
 
 function SettingsIcon() {
