@@ -1,0 +1,26 @@
+{
+  "id": "/pos",
+  "name": "Nail Time & Spa POS",
+  "short_name": "Nail Time POS",
+  "description": "ระบบขายหน้าร้านและจัดการร้าน Nail Time & Spa",
+  "lang": "th",
+  "start_url": "/pos",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f6",
+  "theme_color": "#b45266",
+  "icons": [
+    {
+      "src": "/icons/nailtime-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/nailtime-mark-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
