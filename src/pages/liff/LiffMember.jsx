@@ -242,6 +242,9 @@ export default function LiffMember() {
                 <div key={i} className="flex min-h-16 items-center justify-between gap-4 py-3.5">
                   <div className="min-w-0">
                     <p className="font-medium text-ink">{srcLabel[h.source] || h.source}</p>
+                    {h.reward_name && (h.source === 'redemption' || h.source === 'redemption_refund') && (
+                      <p className="mt-0.5 text-xs font-medium text-rosedeep">{h.reward_name}</p>
+                    )}
                     <p className="mt-1 text-xs text-sagegray">{formatHistoryDate(h.at)}</p>
                   </div>
                   <span className={h.change > 0 ? 'shrink-0 font-semibold tabular-nums text-success' : 'shrink-0 font-semibold tabular-nums text-rosedeep'}>
