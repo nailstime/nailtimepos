@@ -55,11 +55,16 @@ export default function LiffMember() {
 
   async function register() {
     if (!form.name || !form.phone || busy) return
+    const phone = form.phone.replace(/\D/g, '')
+    if (phone.length !== 10) {
+      setErr('กรุณากรอกเบอร์โทรศัพท์ 10 หลัก')
+      return
+    }
     setBusy(true); setErr('')
     try {
       const data = await callMemberApi('register', {
         name: form.name,
-        phone: form.phone,
+        phone,
         claim_code: form.claimCode || null,
       })
       const result = data.result
@@ -116,7 +121,8 @@ export default function LiffMember() {
         <label className="mt-4 block text-sm font-semibold text-ink">
           เบอร์โทรศัพท์
           <input className="input mt-2" placeholder="0xx-xxx-xxxx" inputMode="tel" value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            type="tel" autoComplete="tel-national" maxLength={10}
+            onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })} />
         </label>
         {needsClaimCode && (
           <label className="mt-4 block text-sm font-semibold text-ink">
