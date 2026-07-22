@@ -8,15 +8,17 @@ export default function Catalog() {
   const { prompt: openPrompt, confirm: openConfirm } = useAppDialog()
   const [services, setServices] = useState([])
   const [products, setProducts] = useState([])
-  const [form, setForm] = useState({ kind: "service", name: "", price: "", commission_pct: "", counts: true })
+  const [categories, setCategories] = useState([])
+  const [form, setForm] = useState({ kind: "service", category_id: "", name: "", price: "", commission_pct: "", counts: true })
   const [error, setError] = useState("")
 
   async function load() {
-    const [{ data: sv }, { data: pd }] = await Promise.all([
+    const [{ data: sv }, { data: pd }, { data: ct }] = await Promise.all([
       supabase.from("services").select("*").order("sort_order"),
       supabase.from("products").select("*").order("name"),
+      supabase.from("catalog_categories").select("*").order("sort_order").order("name"),
     ])
-    setServices(sv || []); setProducts(pd || [])
+    setServices(sv || []); setProducts(pd || []); setCategories(ct || [])
   }
   useEffect(() => { load() }, [])
 
@@ -28,6 +30,7 @@ export default function Catalog() {
       p_price: Number(form.price),
       p_commission_pct: Number(form.commission_pct || 0),
       p_counts_toward_points: form.counts,
+      p_category: form.category_id || null,
     })
     setForm({ ...form, name: "", price: "", commission_pct: "" })
     load()
@@ -68,6 +71,7 @@ export default function Catalog() {
       p_price: price,
       p_commission_pct: commissionPct,
       p_counts_toward_points: draft.counts_toward_points,
+      p_category: draft.category_id || null,
     })
     if (rpcError) {
       setError(rpcError.message)
@@ -163,6 +167,58 @@ export default function Catalog() {
     load()
   }
 
+  const categoriesFor = (kind) => categories.filter((category) => category.kind === kind)
+  const categoryName = (categoryId) => categories.find((category) => category.id === categoryId)?.name || ''
+
+  async function createCategory(kind) {
+    const name = await openPrompt({
+      title: `เพิ่มหมวด${kind === 'service' ? 'บริการ' : 'สินค้า'}`,
+      label: 'ชื่อหมวดหมู่',
+      placeholder: kind === 'service' ? 'เช่น เล็บมือ' : 'เช่น สีทาเล็บ',
+      required: true,
+      maxLength: 80,
+      confirmLabel: 'เพิ่มหมวดหมู่',
+      validate: (value) => value.trim().length ? null : 'กรุณาระบุชื่อหมวดหมู่',
+    })
+    if (name === null) return
+    setError('')
+    const { error: rpcError } = await supabase.rpc('catalog_category_create', { p_kind: kind, p_name: name.trim() })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+
+  async function renameCategory(category) {
+    const name = await openPrompt({
+      title: `เปลี่ยนชื่อหมวด ${category.name}`,
+      label: 'ชื่อหมวดหมู่',
+      initialValue: category.name,
+      required: true,
+      maxLength: 80,
+      confirmLabel: 'บันทึกชื่อ',
+      validate: (value) => value.trim().length ? null : 'กรุณาระบุชื่อหมวดหมู่',
+    })
+    if (name === null || name.trim() === category.name) return
+    setError('')
+    const { error: rpcError } = await supabase.rpc('catalog_category_rename', { p_category: category.id, p_name: name.trim() })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+
+  async function deleteCategory(category) {
+    const confirmed = await openConfirm({
+      title: `ลบหมวด ${category.name}`,
+      description: 'รายการในหมวดนี้จะไม่ถูกลบ แต่จะกลับไปอยู่ใน “ยังไม่จัดหมวด”',
+      confirmLabel: 'ลบหมวดหมู่',
+      cancelLabel: 'ยกเลิก',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setError('')
+    const { error: rpcError } = await supabase.rpc('catalog_category_delete', { p_category: category.id })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+
   const Row = ({ it, table, isProduct }) => {
     const isActive = table === "services" ? it.is_active : it.active
     const isVariablePrice = table === "services" && it.price_mode === "variable"
@@ -173,6 +229,7 @@ export default function Catalog() {
       price: String(it.price ?? 0),
       commission_pct: String(it.commission_pct ?? 0),
       counts_toward_points: Boolean(it.counts_toward_points),
+      category_id: it.category_id || '',
     })
 
     function beginEdit() {
@@ -181,6 +238,7 @@ export default function Catalog() {
         price: String(it.price ?? 0),
         commission_pct: String(it.commission_pct ?? 0),
         counts_toward_points: Boolean(it.counts_toward_points),
+        category_id: it.category_id || '',
       })
       setEditing(true)
     }
@@ -195,7 +253,7 @@ export default function Catalog() {
 
     return <>
     <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_72px_72px_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_72px_auto_auto_auto]")}>
-      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
+      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
       <span className="text-right font-bold tabular-nums">{isVariablePrice ? `฿${baht(it.min_price)}–${baht(it.max_price)}` : `฿${baht(it.price)}`}</span>
       <span className="text-right text-sagegray">คอม {it.commission_pct}%</span>
       {isProduct && (
@@ -211,8 +269,9 @@ export default function Catalog() {
       <button onClick={beginEdit} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-rosedeep hover:bg-rose/10" aria-label={`แก้ไข ${it.name}`}>แก้ไข</button>
     </div>
     {editing && <form onSubmit={saveEdit} className="border-b border-mist bg-porcelain/65 px-3 py-4 sm:px-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_140px_140px_auto] xl:items-end">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_140px_auto] xl:items-end">
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ชื่อรายการ</span><input className="input" required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">หมวดหมู่</span><select className="input" value={draft.category_id} onChange={(event) => setDraft({ ...draft, category_id: event.target.value })}><option value="">ยังไม่จัดหมวด</option>{categoriesFor(table === 'services' ? 'service' : 'product').map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{isVariablePrice ? "ช่วงราคา" : "ราคา (บาท)"}</span><input className="input" required disabled={isVariablePrice} inputMode="decimal" value={isVariablePrice ? `${baht(it.min_price)}–${baht(it.max_price)}` : draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} />{isVariablePrice && <span className="mt-1 block text-xs text-sagegray">POS จะขอราคาและรายละเอียดทุกครั้ง</span>}</label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ค่าคอม (%)</span><input className="input" required inputMode="decimal" value={draft.commission_pct} onChange={(event) => setDraft({ ...draft, commission_pct: event.target.value })} /></label>
         <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.counts_toward_points} onChange={(event) => setDraft({ ...draft, counts_toward_points: event.target.checked })} />นับยอดสะสมสิทธิ์</label>
@@ -231,10 +290,14 @@ export default function Catalog() {
       {error && <p role="alert" className="mb-5 rounded-xl border border-danger/15 bg-danger/5 px-4 py-3 text-sm font-medium text-danger">{error}</p>}
       <section className="card mb-5 p-5 sm:p-6">
         <div className="mb-4"><p className="section-title">เพิ่มรายการใหม่</p><p className="section-note">รายการใหม่จะพร้อมใช้งานที่หน้า POS ทันที</p></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[160px_minmax(220px,1fr)_160px_160px_140px]">
-          <select className="input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[140px_160px_minmax(200px,1fr)_130px_130px_130px]">
+          <select className="input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, category_id: "" })}>
             <option value="service">บริการ</option>
             <option value="product">สินค้า</option>
+          </select>
+          <select className="input" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
+            <option value="">ยังไม่จัดหมวด</option>
+            {categoriesFor(form.kind).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select>
           <input className="input" placeholder="ชื่อ" value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -249,6 +312,23 @@ export default function Catalog() {
             onChange={(e) => setForm({ ...form, counts: e.target.checked })} />
           นับยอดสะสมสิทธิ์
         </label>
+      </section>
+
+      <section className="card mb-5 p-5 sm:p-6">
+        <div><p className="section-title">หมวดหมู่</p><p className="section-note">จัดบริการและสินค้าให้ POS ค้นหาและกรองได้รวดเร็วขึ้น</p></div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          {['service', 'product'].map((kind) => {
+            const kindCategories = categoriesFor(kind)
+            const categoryItems = kind === 'service' ? services : products
+            return <div key={kind} className="rounded-2xl border border-mist bg-porcelain/45 p-4">
+              <div className="flex items-center justify-between gap-3"><p className="font-semibold">{kind === 'service' ? 'หมวดบริการ' : 'หมวดสินค้า'}</p><button type="button" onClick={() => createCategory(kind)} className="btn-ghost min-h-9 px-3">เพิ่มหมวด</button></div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {kindCategories.map((category) => <div key={category.id} className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-mist bg-white py-1 pl-3 pr-1 text-sm font-semibold"><span>{category.name}</span><span className="text-xs font-medium text-sagegray">{categoryItems.filter((item) => item.category_id === category.id).length}</span><button type="button" onClick={() => renameCategory(category)} className="rounded-lg px-2 py-1 text-xs text-rosedeep hover:bg-rose/10">แก้ไข</button><button type="button" onClick={() => deleteCategory(category)} className="rounded-lg px-2 py-1 text-xs text-danger hover:bg-danger/5">ลบ</button></div>)}
+                {kindCategories.length === 0 && <p className="text-sm text-sagegray">ยังไม่มีหมวดหมู่</p>}
+              </div>
+            </div>
+          })}
+        </div>
       </section>
 
       <div className="grid items-start gap-5 xl:grid-cols-2">

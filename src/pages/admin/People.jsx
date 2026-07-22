@@ -7,32 +7,68 @@ import SettingsBackLink from "../../components/SettingsBackLink.jsx"
 
 export default function People() {
   const { staff } = useAuth()
-  const { prompt: openPrompt } = useAppDialog()
+  const { prompt: openPrompt, confirm } = useAppDialog()
   const [staffList, setStaffList] = useState([])
+  const [branches, setBranches] = useState([])
+  const [branchSelection, setBranchSelection] = useState({})
+  const [editingStaffId, setEditingStaffId] = useState(null)
   const [members, setMembers] = useState([])
   const [q, setQ] = useState("")
-  const [newStaff, setNewStaff] = useState({ name: "", role: "technician", pin: "" })
+  const [newStaff, setNewStaff] = useState({ name: "", role: "technician", pin: "", branch_id: "" })
   const [msg, setMsg] = useState("")
 
   async function load() {
-    const [{ data: st }, { data: mb }] = await Promise.all([
-      supabase.from("staff").select("id,branch_id,name,role,active,created_at").order("created_at"),
+    const [{ data: settings, error: staffError }, { data: mb }] = await Promise.all([
+      supabase.rpc("admin_staff_settings"),
       supabase.from("members").select("id,profile_id,branch_id,name,phone,line_user_id,accumulated_baht,points_balance,joined_at").order("joined_at", { ascending: false }).limit(50),
     ])
-    setStaffList(st || []); setMembers(mb || [])
+    if (staffError) return setMsg(staffError.message)
+    const nextBranches = settings?.branches || []
+    setBranches(nextBranches)
+    setStaffList(settings?.staff || [])
+    setMembers(mb || [])
+    setNewStaff((current) => current.branch_id || nextBranches.length === 0
+      ? current
+      : { ...current, branch_id: nextBranches[0].id })
   }
   useEffect(() => { load() }, [])
 
   async function addStaff() {
     setMsg("")
+    if (!newStaff.branch_id) return setMsg("กรุณาเลือกสาขาของพนักงาน")
     const { error } = await supabase.rpc("create_staff", {
-      p_name: newStaff.name, p_role: newStaff.role, p_pin: newStaff.pin,
+      p_name: newStaff.name,
+      p_role: newStaff.role,
+      p_pin: newStaff.pin,
+      p_branch: newStaff.branch_id,
     })
     if (error) return setMsg(error.message)
-    setNewStaff({ name: "", role: "technician", pin: "" })
-    setMsg("เพิ่มพนักงานแล้ว")
+    const assignedBranch = newStaff.branch_id
+    setNewStaff({ name: "", role: "technician", pin: "", branch_id: assignedBranch })
+    setMsg("เพิ่มพนักงานและผูกสาขาแล้ว")
     load()
   }
+
+  async function moveStaff(s) {
+    const branchId = branchSelection[s.id] || s.branch_id
+    if (branchId === s.branch_id) return
+    const target = branches.find((item) => item.id === branchId)
+    if (!target) return setMsg("กรุณาเลือกสาขาที่ใช้งานอยู่")
+    const approved = await confirm({
+      title: `ย้าย ${s.name} ไป ${target.code}`,
+      description: `พนักงานจะถูกออกจากระบบบนเครื่องที่เปิดอยู่ และเมื่อล็อกอินด้วย PIN ครั้งถัดไปจะเข้า POS ของสาขา ${target.name}`,
+      confirmLabel: "ย้ายสาขา",
+      cancelLabel: "ยกเลิก",
+    })
+    if (!approved) return
+    const { error } = await supabase.rpc("move_staff_branch", { p_staff: s.id, p_branch: branchId })
+    setMsg(error ? error.message : `ย้าย ${s.name} ไปสาขา ${target.code} แล้ว`)
+    if (!error) {
+      setEditingStaffId(null)
+      load()
+    }
+  }
+
   async function resetPin(s) {
     const pin = await openPrompt({
       title: 'เปลี่ยน PIN พนักงาน',
@@ -49,12 +85,15 @@ export default function People() {
     })
     if (pin === null) return
     const { error } = await supabase.rpc("reset_staff_pin", { p_staff: s.id, p_pin: pin })
-    setMsg(error ? error.message : "เปลี่ยน PIN แล้ว")
+    setMsg(error ? error.message : "เปลี่ยน PIN แล้ว และออกจาก session เดิมแล้ว")
   }
+
   async function toggleStaff(s) {
-    await supabase.rpc("toggle_staff_active", { p_staff: s.id })
-    load()
+    const { error } = await supabase.rpc("toggle_staff_active", { p_staff: s.id })
+    setMsg(error ? error.message : `${s.active ? "ปิดใช้งาน" : "เปิดใช้งาน"} ${s.name} แล้ว`)
+    if (!error) load()
   }
+
   async function adjustPoints(m) {
     const changeInput = await openPrompt({
       title: 'ปรับสิทธิ์สมาชิก',
@@ -82,65 +121,71 @@ export default function People() {
     load()
   }
 
-  const filtered = members.filter((m) =>
-    !q || m.name?.includes(q) || m.phone?.includes(q))
+  const filtered = members.filter((m) => !q || m.name?.includes(q) || m.phone?.includes(q))
 
   return (
     <div className="w-full">
       <SettingsBackLink />
-      <div className="page-heading"><div><p className="page-eyebrow">People</p><h1 className="page-title">พนักงานและสมาชิก</h1><p className="page-description">ดูแลสิทธิ์พนักงาน PIN และข้อมูลสมาชิกจากพื้นที่เดียว</p></div></div>
+      <div className="page-heading"><div><p className="page-eyebrow">People</p><h1 className="page-title">พนักงานและสมาชิก</h1><p className="page-description">กำหนดสาขาประจำให้พนักงาน เพื่อให้ PIN พาเข้า POS ได้ถูกสาขา</p></div></div>
       {msg && <p role="status" className="mb-4 rounded-xl border border-mist bg-white px-4 py-3 text-sm font-medium">{msg}</p>}
+
+      <section className="card mb-5 p-5 sm:p-6">
+        <p className="section-title">เพิ่มพนักงานใหม่</p>
+        <p className="section-note mt-1">ระบุสาขาประจำก่อนเพิ่ม — PIN จะเข้า POS ของสาขานี้เท่านั้น</p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-ink">ชื่อพนักงาน</span><input className="input" placeholder="เช่น นิดา" value={newStaff.name} onChange={(event) => setNewStaff({ ...newStaff, name: event.target.value })} /></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-ink">สาขาประจำ</span><select className="input" value={newStaff.branch_id} onChange={(event) => setNewStaff({ ...newStaff, branch_id: event.target.value })} disabled={branches.length === 0}><option value="" disabled>เลือกสาขา</option>{branches.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-ink">บทบาท</span><select className="input" value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })}><option value="technician">ช่าง</option><option value="owner">Owner</option></select></label>
+          <label className="block"><span className="mb-1.5 block text-sm font-semibold text-ink">PIN 6 หลัก</span><input className="input" placeholder="ตัวเลข 6 หลัก" inputMode="numeric" maxLength={6} value={newStaff.pin} onChange={(event) => setNewStaff({ ...newStaff, pin: event.target.value.replace(/\D/g, '') })} /></label>
+        </div>
+        <button type="button" onClick={addStaff} disabled={branches.length === 0} className="btn-rose mt-5 w-full sm:w-auto">เพิ่มพนักงาน</button>
+      </section>
+
       <section className="card mb-5 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-mist px-5 py-4"><div><p className="section-title">พนักงาน</p><p className="section-note">จัดการบทบาท สถานะ และ PIN</p></div><span className="badge-neutral">{staffList.length}</span></div>
+        <div className="flex items-center justify-between border-b border-mist px-5 py-4"><div><p className="section-title">พนักงานในระบบ</p><p className="section-note">ดูสาขาประจำ และจัดการ PIN หรือสถานะ</p></div><span className="badge-neutral">{staffList.length}</span></div>
         <div className="px-5 py-2">
-        {staffList.map((s) => (
-          <div key={s.id} className="data-row grid-cols-[minmax(0,1fr)_auto] text-sm">
-            <div className={!s.active ? "line-through text-sagegray" : ""}>
-              <p className="font-semibold">{s.name}</p><p className="mt-1 text-xs text-sagegray">{s.role === "owner" ? "Owner" : "ช่าง"} · {s.active ? "ใช้งานอยู่" : "ปิดใช้งาน"}</p>
-            </div>
-            <span className="flex flex-wrap justify-end gap-1.5">
-              <button onClick={() => resetPin(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">เปลี่ยน PIN</button>
-              {s.id !== staff.id && (
-                <button onClick={() => toggleStaff(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-danger">
-                  {s.active ? "ปิดใช้" : "เปิดใช้"}
-                </button>
-              )}
-            </span>
-          </div>
-        ))}
-        </div>
-        <div className="border-t border-mist bg-porcelain/55 p-5">
-          <p className="mb-3 text-sm font-bold">เพิ่มพนักงานใหม่</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_180px_180px_140px]">
-          <input className="input" placeholder="ชื่อ" value={newStaff.name}
-            onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} />
-          <select className="input" value={newStaff.role}
-            onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}>
-            <option value="technician">ช่าง</option>
-            <option value="owner">Owner</option>
-          </select>
-          <input className="input" placeholder="PIN 6 หลัก" inputMode="numeric" value={newStaff.pin}
-            onChange={(e) => setNewStaff({ ...newStaff, pin: e.target.value })} />
-          <button onClick={addStaff} className="btn-rose text-sm">เพิ่ม</button>
-        </div>
+          {staffList.map((s) => {
+            const selectedBranch = branchSelection[s.id] || s.branch_id
+            const canMove = s.id !== staff?.id
+            const isEditing = editingStaffId === s.id
+            return (
+              <div key={s.id} className="border-b border-mist py-4 last:border-b-0">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className={!s.active ? "line-through text-sagegray" : ""}>
+                    <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{s.name}</p><span className="badge-neutral">{s.role === "owner" ? "Owner" : "ช่าง"}</span>{!s.active && <span className="badge-rose">ปิดใช้งาน</span>}</div>
+                    <p className="mt-1.5 text-sm text-sagegray">สาขาประจำ <span className="font-semibold text-ink">{s.branch_code}</span> · {s.branch_name}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
+                  {canMove && <button type="button" onClick={() => { setEditingStaffId(isEditing ? null : s.id); setBranchSelection({ ...branchSelection, [s.id]: s.branch_id }) }} className="min-h-10 rounded-xl px-3 font-semibold text-rosedeep hover:bg-rose/10">{isEditing ? "ยกเลิกเปลี่ยนสาขา" : "เปลี่ยนสาขา"}</button>}
+                  <button type="button" onClick={() => resetPin(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">เปลี่ยน PIN</button>
+                  {s.id !== staff?.id && <button type="button" onClick={() => toggleStaff(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-danger">{s.active ? "ปิดใช้" : "เปิดใช้"}</button>}
+                  </div>
+                </div>
+                {isEditing && <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-rose/20 bg-rose/5 p-4 sm:flex-row sm:items-end">
+                  <label className="block flex-1"><span className="mb-1.5 block text-sm font-semibold text-ink">ย้ายไปสาขา</span><select aria-label={`เลือกสาขาใหม่ของ ${s.name}`} className="input" value={selectedBranch} onChange={(event) => setBranchSelection({ ...branchSelection, [s.id]: event.target.value })}>{branches.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+                  <button type="button" onClick={() => moveStaff(s)} disabled={selectedBranch === s.branch_id} className="btn-rose sm:min-w-32">ยืนยันย้าย</button>
+                </div>}
+              </div>
+            )
+          })}
         </div>
       </section>
 
       <section className="card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-mist px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="section-title">สมาชิก</p><p className="section-note">50 รายการล่าสุด</p></div>
-          <input aria-label="ค้นหาสมาชิก" className="input sm:w-64" placeholder="ค้นหาชื่อหรือเบอร์โทร" value={q} onChange={(e) => setQ(e.target.value)} />
+          <div><p className="section-title">สมาชิก</p><p className="section-note">50 รายการล่าสุดของสาขาที่กำลังล็อกอิน</p></div>
+          <input aria-label="ค้นหาสมาชิก" className="input sm:w-64" placeholder="ค้นหาชื่อหรือเบอร์โทร" value={q} onChange={(event) => setQ(event.target.value)} />
         </div>
         <div className="px-5 py-2">
-        {filtered.map((m) => (
-          <div key={m.id} className="data-row grid-cols-[minmax(0,1fr)_auto] text-sm lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-            <div><p className="font-semibold">{m.name}</p><p className="mt-1 text-xs text-sagegray">{m.phone}{!m.line_user_id && <span className="text-rosedeep"> · ยังไม่ผูก LINE</span>}</p></div>
-            <span className="text-sagegray">สะสม ฿{baht(m.accumulated_baht)}</span>
-            <span className="badge-rose">{m.points_balance} สิทธิ์</span>
-            <button onClick={() => adjustPoints(m)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">ปรับสิทธิ์</button>
-          </div>
-        ))}
-        {filtered.length === 0 && <div className="empty-state my-3">ไม่พบสมาชิก</div>}
+          {filtered.map((m) => (
+            <div key={m.id} className="data-row grid-cols-[minmax(0,1fr)_auto] text-sm lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+              <div><p className="font-semibold">{m.name}</p><p className="mt-1 text-xs text-sagegray">{m.phone}{!m.line_user_id && <span className="text-rosedeep"> · ยังไม่ผูก LINE</span>}</p></div>
+              <span className="text-sagegray">สะสม ฿{baht(m.accumulated_baht)}</span>
+              <span className="badge-rose">{m.points_balance} สิทธิ์</span>
+              <button type="button" onClick={() => adjustPoints(m)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">ปรับสิทธิ์</button>
+            </div>
+          ))}
+          {filtered.length === 0 && <div className="empty-state my-3">ไม่พบสมาชิก</div>}
         </div>
       </section>
     </div>

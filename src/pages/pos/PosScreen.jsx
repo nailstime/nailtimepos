@@ -22,6 +22,31 @@ function catalogPriceLabel(item) {
   return `฿${baht(item.price)}`
 }
 
+function normalizeCatalogSearch(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .toLocaleLowerCase('th-TH')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function fuzzyCatalogMatch(value, query) {
+  const candidate = normalizeCatalogSearch(value)
+  const terms = normalizeCatalogSearch(query).split(' ').filter(Boolean)
+  if (!terms.length) return true
+  if (terms.every((term) => candidate.includes(term))) return true
+
+  // A forgiving fallback for short hand or a missing character, e.g. “ทาเลบ”.
+  const needle = terms.join('')
+  let cursor = 0
+  for (const char of candidate) {
+    if (char === needle[cursor]) cursor += 1
+    if (cursor === needle.length) return true
+  }
+  return false
+}
+
 export default function PosScreen() {
   const { staff, logout } = useAuth()
   const { prompt: openPrompt, confirm: openConfirm } = useAppDialog()
@@ -30,9 +55,12 @@ export default function PosScreen() {
   const pendingView = location.pathname.endsWith('/pending')
   const [services, setServices] = useState([])
   const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
   const [rewards, setRewards] = useState([])
   const [techs, setTechs] = useState([])
   const [tab, setTab] = useState('service')
+  const [categoryId, setCategoryId] = useState('')
+  const [catalogSearch, setCatalogSearch] = useState('')
   const [cart, setCart] = useState([])
   const [member, setMember] = useState(null)
   const [phone, setPhone] = useState('')
@@ -171,13 +199,15 @@ export default function PosScreen() {
 
   useEffect(() => {
     ;(async () => {
-      const [{ data: sv }, { data: pd }, { data: rw }, { data: st }] = await Promise.all([
+      const [{ data: sv }, { data: pd }, { data: ct }, { data: rw }, { data: st }] = await Promise.all([
         supabase.from('services').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('products').select('*').eq('active', true),
+        supabase.from('catalog_categories').select('*').order('sort_order').order('name'),
         supabase.from('rewards').select('*').eq('active', true).order('points_cost'),
         supabase.from('staff').select('id,name').eq('role', 'technician').eq('active', true),
       ])
       setServices(sv || []); setProducts(pd || []); setRewards(rw || [])
+      setCategories(ct || [])
       setTechs(st || [])
     })()
   }, [])
@@ -212,6 +242,23 @@ export default function PosScreen() {
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart])
   const redeemInCart = cart.filter((c) => c.item_type === 'redemption')
+  const tabCategories = useMemo(() => (
+    tab === 'service' || tab === 'product'
+      ? categories.filter((category) => category.kind === tab)
+      : []
+  ), [categories, tab])
+  const visibleCatalogItems = useMemo(() => {
+    const source = tab === 'service' ? services : tab === 'product' ? products : rewards
+    return source.filter((item) => (
+      (!categoryId || (categoryId === '__uncategorized__' ? !item.category_id : item.category_id === categoryId))
+      && fuzzyCatalogMatch(item.name, catalogSearch)
+    ))
+  }, [catalogSearch, categoryId, products, rewards, services, tab])
+
+  function selectCatalogTab(nextTab) {
+    setTab(nextTab)
+    setCategoryId('')
+  }
 
   async function addItem(it, type) {
     if (type === 'redemption') {
@@ -279,6 +326,20 @@ export default function PosScreen() {
   }
   const removeItem = (key) => setCart((c) => c.filter((x) => x.key !== key))
   const setTech = (key, id) => setCart((c) => c.map((x) => (x.key === key ? { ...x, technician_id: id } : x)))
+
+  async function clearCart() {
+    if (!cart.length) return
+    const confirmed = await openConfirm({
+      title: 'ล้างรายการในบิล',
+      description: `รายการทั้งหมด ${cart.length} รายการจะถูกลบออกจากบิลนี้`,
+      cancelLabel: 'เก็บรายการไว้',
+      confirmLabel: 'ล้างรายการ',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setCart([])
+    setErr('')
+  }
 
   async function findMember() {
     setErr('')
@@ -638,23 +699,41 @@ export default function PosScreen() {
         </div>
         <span className="badge-neutral self-start sm:self-auto">{cart.length} รายการในบิล</span>
       </div>
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_420px]">
         <div>
           <div className="soft-panel hide-scrollbar mb-4 flex gap-1.5 overflow-x-auto p-1.5">
-            <button onClick={() => setTab('service')} className={(tab === 'service' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>บริการ</button>
-            <button onClick={() => setTab('product')} className={(tab === 'product' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>สินค้า</button>
-            <button onClick={() => setTab('redeem')} className={(tab === 'redeem' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ใช้สิทธิ์</button>
+            <button onClick={() => selectCatalogTab('service')} className={(tab === 'service' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>บริการ</button>
+            <button onClick={() => selectCatalogTab('product')} className={(tab === 'product' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>สินค้า</button>
+            <button onClick={() => selectCatalogTab('redeem')} className={(tab === 'redeem' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ใช้สิทธิ์</button>
+          </div>
+          <div className="mb-4 space-y-3">
+            <input
+              className="input"
+              type="search"
+              value={catalogSearch}
+              onChange={(event) => setCatalogSearch(event.target.value)}
+              placeholder={tab === 'redeem' ? 'ค้นหาสิทธิ์แลกรางวัล' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'} — พิมพ์บางส่วนได้`}
+              aria-label={tab === 'redeem' ? 'ค้นหาสิทธิ์แลกรางวัล' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'}`}
+            />
+            {tabCategories.length > 0 && (
+              <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-0.5" aria-label="กรองตามหมวดหมู่">
+                <button type="button" onClick={() => setCategoryId('')} className={(categoryId === '' ? 'btn-rose' : 'btn-ghost') + ' shrink-0 px-3'}>ทั้งหมด</button>
+                <button type="button" onClick={() => setCategoryId('__uncategorized__')} className={(categoryId === '__uncategorized__' ? 'btn-rose' : 'btn-ghost') + ' shrink-0 px-3'}>ยังไม่จัดหมวด</button>
+                {tabCategories.map((category) => <button key={category.id} type="button" onClick={() => setCategoryId(category.id)} className={(categoryId === category.id ? 'btn-rose' : 'btn-ghost') + ' shrink-0 px-3'}>{category.name}</button>)}
+              </div>
+            )}
+            <p className="text-xs font-medium text-sagegray">พบ {visibleCatalogItems.length} รายการ</p>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-4">
             {tab === 'redeem'
-              ? rewards.map((it) => (
+              ? visibleCatalogItems.map((it) => (
                   <button key={it.id} onClick={() => addItem(it, 'redemption')}
                     className="card group min-h-32 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-rose/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
                     <p className="font-semibold leading-6 group-hover:text-rosedeep">{it.name}</p>
                     <p className="mt-3 text-sm font-bold text-rosedeep">{it.points_cost} สิทธิ์</p>
                   </button>
                 ))
-              : (tab === 'service' ? services : products).map((it) => (
+              : visibleCatalogItems.map((it) => (
                   <button key={it.id} onClick={() => addItem(it, tab)}
                     className="card group min-h-32 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-rose/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
                     <p className="font-semibold leading-6 group-hover:text-rosedeep">{it.name}</p>
@@ -663,20 +742,25 @@ export default function PosScreen() {
                     {tab === 'product' && <p className="text-xs text-sagegray">คงเหลือ {it.stock_qty}</p>}
                   </button>
                 ))}
-            {tab === 'redeem' && rewards.length === 0 && (
-              <p className="text-sagegray text-sm col-span-full">ยังไม่มีรางวัล — Owner เพิ่มได้ที่หลังบ้าน</p>
-            )}
+            {visibleCatalogItems.length === 0 && <p className="empty-state col-span-full">ไม่พบรายการที่ตรงกับการค้นหาหรือหมวดหมู่ที่เลือก</p>}
           </div>
         </div>
 
-        <aside className="card h-fit overflow-hidden xl:sticky xl:top-5">
+        <aside className="card h-fit overflow-hidden lg:sticky lg:top-5">
           <div className="border-b border-mist px-5 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="section-title">รายการในบิล</p>
                 <p className="section-note">โต๊ะชำระเงิน · {counterCode}</p>
               </div>
-              <span className="badge-neutral">{cart.length}</span>
+              <div className="flex items-center gap-2">
+                {cart.length > 0 && (
+                  <button onClick={clearCart} className="min-h-9 rounded-lg px-2.5 text-sm font-medium text-danger transition hover:bg-danger/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger">
+                    ล้างรายการ
+                  </button>
+                )}
+                <span className="badge-neutral">{cart.length}</span>
+              </div>
             </div>
           </div>
           <div className="p-5">
