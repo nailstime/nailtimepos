@@ -94,7 +94,7 @@ export default function ReceiptDetail() {
         </section>
 
         <footer className="border-t border-mist bg-porcelain/55 px-5 py-5 text-sm text-sagegray sm:px-8">
-          <p>เปิดบิลโดย {staff.opened_by || "-"}{order.points_awarded ? ` · ได้รับ ${order.points_awarded} สิทธิ์` : ""}</p>
+          <p>เปิดบิลโดย {staff.opened_by || "-"}{order.points_awarded ? ` · ได้รับ ${order.points_awarded} NTime` : ""}</p>
           {order.void_reason && <p className="mt-2 text-danger">เหตุผลที่ยกเลิก: {order.void_reason}{staff.void_approved_by ? ` · อนุมัติโดย ${staff.void_approved_by}` : ""}</p>}
         </footer>
       </article>

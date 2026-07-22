@@ -96,15 +96,15 @@ export default function People() {
 
   async function adjustPoints(m) {
     const changeInput = await openPrompt({
-      title: 'ปรับสิทธิ์สมาชิก',
-      description: `เพิ่มหรือลดจำนวนสิทธิ์ของ ${m.name}`,
+      title: 'ปรับ NTime สมาชิก',
+      description: `เพิ่มหรือลดจำนวน NTime ของ ${m.name}`,
       label: 'จำนวนที่ต้องการปรับ',
       initialValue: '1',
       placeholder: 'เช่น 1 หรือ -1',
       inputMode: 'numeric',
       required: true,
       confirmLabel: 'บันทึกการปรับ',
-      helperText: 'ใช้จำนวนบวกเพื่อเพิ่ม และจำนวนติดลบเพื่อลดสิทธิ์',
+      helperText: 'ใช้จำนวนบวกเพื่อเพิ่ม และจำนวนติดลบเพื่อลด NTime',
       validate: (value) => {
         const amount = Number(value)
         if (!Number.isInteger(amount) || amount === 0) return 'กรุณากรอกจำนวนเต็มที่ไม่เท่ากับ 0'
@@ -117,7 +117,7 @@ export default function People() {
     const { error } = await supabase.rpc("adjust_member_points", {
       p_member: m.id, p_change: change, p_note: "manual",
     })
-    setMsg(error ? error.message : "ปรับสิทธิ์แล้ว")
+    setMsg(error ? error.message : "ปรับ NTime แล้ว")
     load()
   }
 
@@ -181,8 +181,8 @@ export default function People() {
             <div key={m.id} className="data-row grid-cols-[minmax(0,1fr)_auto] text-sm lg:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
               <div><p className="font-semibold">{m.name}</p><p className="mt-1 text-xs text-sagegray">{m.phone}{!m.line_user_id && <span className="text-rosedeep"> · ยังไม่ผูก LINE</span>}</p></div>
               <span className="text-sagegray">สะสม ฿{baht(m.accumulated_baht)}</span>
-              <span className="badge-rose">{m.points_balance} สิทธิ์</span>
-              <button type="button" onClick={() => adjustPoints(m)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">ปรับสิทธิ์</button>
+              <span className="badge-rose">{m.points_balance} NTime</span>
+              <button type="button" onClick={() => adjustPoints(m)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">ปรับ NTime</button>
             </div>
           ))}
           {filtered.length === 0 && <div className="empty-state my-3">ไม่พบสมาชิก</div>}

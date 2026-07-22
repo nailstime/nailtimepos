@@ -4,6 +4,7 @@ import { corsHeaders, json } from "../_shared/http.ts"
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) })
   if (req.method !== "POST") return json(req, { error: "method_not_allowed" }, 405)
+
   try {
     const { redemption_id } = await req.json()
     const { admin, staff } = await requireStaff(req)
@@ -14,11 +15,13 @@ Deno.serve(async (req) => {
       .eq("orders.branch_id", staff.branch_id)
       .eq("orders.status", "awaiting_payment")
       .single()
+
     if (error) throw error
     if (!redemption?.members?.line_user_id) return json(req, { skipped: "member_has_no_line" })
 
     const liffUrl = Deno.env.get("LIFF_URL")
     if (!liffUrl) throw new Error("LIFF_URL is not configured")
+
     const response = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: {
@@ -29,15 +32,16 @@ Deno.serve(async (req) => {
         to: redemption.members.line_user_id,
         messages: [{
           type: "template",
-          altText: `ยืนยันใช้ ${redemption.points_cost_snapshot} สิทธิ์ แลก ${redemption.rewards.name}`,
+          altText: `ยืนยันใช้ ${redemption.points_cost_snapshot} NTime แลก ${redemption.rewards.name}`,
           template: {
             type: "buttons",
-            text: `ยืนยันใช้ ${redemption.points_cost_snapshot} สิทธิ์\nแลก: ${redemption.rewards.name}`,
+            text: `ยืนยันใช้ ${redemption.points_cost_snapshot} NTime\nแลก: ${redemption.rewards.name}`,
             actions: [{ type: "uri", label: "ยืนยันในหน้าสมาชิก", uri: liffUrl }],
           },
         }],
       }),
     })
+
     if (!response.ok) throw new Error(`LINE push failed (${response.status})`)
     return json(req, { ok: true })
   } catch (error) {

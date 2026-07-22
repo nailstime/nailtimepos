@@ -262,10 +262,10 @@ export default function PosScreen() {
 
   async function addItem(it, type) {
     if (type === 'redemption') {
-      if (!member) return setErr('เลือกสมาชิกก่อนใช้สิทธิ์')
-      if (!member.line_linked) return setErr('ต้องผูก LINE ก่อนใช้สิทธิ์ — ออกโค้ดผูก LINE ให้ลูกค้า แล้วให้กรอกในหน้า LIFF')
+      if (!member) return setErr('เลือกสมาชิกก่อนใช้ NTime')
+      if (!member.line_linked) return setErr('ต้องผูก LINE ก่อนใช้ NTime — ออกโค้ดผูก LINE ให้ลูกค้า แล้วให้กรอกในหน้า LIFF')
       const used = redeemInCart.reduce((s, c) => s + c.points_cost, 0)
-      if (member.points_balance < used + it.points_cost) return setErr('สิทธิ์สมาชิกไม่พอ')
+      if (member.points_balance < used + it.points_cost) return setErr('NTime ของสมาชิกไม่พอ')
       setErr('')
       return setCart((c) => [...c, {
         key: 'r' + it.id + Math.random(), item_type: 'redemption', ref: it.id,
@@ -361,7 +361,7 @@ export default function PosScreen() {
     if (busy) return
     const name = await openPrompt({
       title: 'สมัครสมาชิกที่ POS',
-      description: 'ขั้นตอน 1 จาก 2 · ลูกค้าสะสมสิทธิ์ได้ทันที แม้ยังไม่ผูก LINE',
+      description: 'ขั้นตอน 1 จาก 2 · ลูกค้าสะสม NTime ได้ทันที แม้ยังไม่ผูก LINE',
       label: 'ชื่อลูกค้า',
       placeholder: 'ชื่อที่ใช้ติดต่อ',
       required: true,
@@ -403,9 +403,9 @@ export default function PosScreen() {
     if (!cart.length || busy) return
     const zeroBill = total === 0
     const confirmed = await openConfirm({
-      title: zeroBill ? 'ยืนยันเปิดบิลใช้สิทธิ์' : 'ยืนยันเปิดบิล',
+      title: zeroBill ? 'ยืนยันเปิดบิลใช้ NTime' : 'ยืนยันเปิดบิล',
       description: zeroBill
-        ? `ระบบจะสร้างบิล ${cart.length} รายการ ยอด ฿0 เพื่อปิดบิลด้วยสิทธิ์`
+        ? `ระบบจะสร้างบิล ${cart.length} รายการ ยอด ฿0 เพื่อปิดบิลด้วย NTime`
         : `ระบบจะสร้างบิล ${cart.length} รายการ และแสดง QR ยอด ฿${baht(total)} บนหน้าจอลูกค้า`,
       cancelLabel: 'กลับไปตรวจสอบ',
       confirmLabel: zeroBill ? 'ยืนยันเปิดบิล' : 'เปิดบิลและแสดง QR',
@@ -645,7 +645,7 @@ export default function PosScreen() {
           )}
           {pendingRedeems > 0 && (
             <p className="mt-5 rounded-xl border border-rose/15 bg-rose/5 p-3 text-sm font-medium text-rosedeep">
-              ⏳ รอลูกค้ายืนยันสิทธิ์ใน LINE ({pendingRedeems} รายการ)
+              ⏳ รอลูกค้ายืนยันใช้ NTime ใน LINE ({pendingRedeems} รายการ)
             </p>
           )}
           {discountReq?.status === 'pending' && (
@@ -673,11 +673,11 @@ export default function PosScreen() {
         <p className="mt-5 font-display text-2xl font-semibold">ชำระเงินเรียบร้อย</p>
         <p className="mt-2 text-3xl font-bold tabular-nums">฿{baht(order.total)}</p>
         {result?.points_earned > 0 && (
-          <p className="text-rosedeep mt-1">สมาชิกได้รับ +{result.points_earned} สิทธิ์</p>
+          <p className="text-rosedeep mt-1">สมาชิกได้รับ +{result.points_earned} NTime</p>
         )}
         {member && (
           <p className="text-sm text-sagegray mt-1">
-            สิทธิ์คงเหลือ {result?.points_balance ?? member.points_balance} สิทธิ์
+            NTime คงเหลือ {result?.points_balance ?? member.points_balance} NTime
           </p>
         )}
           {err && <p role="alert" className="mt-4 rounded-xl bg-danger/5 px-4 py-3 text-sm text-danger">{err}</p>}
@@ -704,7 +704,7 @@ export default function PosScreen() {
           <div className="soft-panel hide-scrollbar mb-4 flex gap-1.5 overflow-x-auto p-1.5">
             <button onClick={() => selectCatalogTab('service')} className={(tab === 'service' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>บริการ</button>
             <button onClick={() => selectCatalogTab('product')} className={(tab === 'product' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>สินค้า</button>
-            <button onClick={() => selectCatalogTab('redeem')} className={(tab === 'redeem' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ใช้สิทธิ์</button>
+            <button onClick={() => selectCatalogTab('redeem')} className={(tab === 'redeem' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ใช้ NTime</button>
           </div>
           <div className="mb-4 space-y-3">
             <input
@@ -712,8 +712,8 @@ export default function PosScreen() {
               type="search"
               value={catalogSearch}
               onChange={(event) => setCatalogSearch(event.target.value)}
-              placeholder={tab === 'redeem' ? 'ค้นหาสิทธิ์แลกรางวัล' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'} — พิมพ์บางส่วนได้`}
-              aria-label={tab === 'redeem' ? 'ค้นหาสิทธิ์แลกรางวัล' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'}`}
+              placeholder={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'} — พิมพ์บางส่วนได้`}
+              aria-label={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'}`}
             />
             {tabCategories.length > 0 && (
               <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-0.5" aria-label="กรองตามหมวดหมู่">
@@ -730,7 +730,7 @@ export default function PosScreen() {
                   <button key={it.id} onClick={() => addItem(it, 'redemption')}
                     className="card group min-h-32 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-rose/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
                     <p className="font-semibold leading-6 group-hover:text-rosedeep">{it.name}</p>
-                    <p className="mt-3 text-sm font-bold text-rosedeep">{it.points_cost} สิทธิ์</p>
+                    <p className="mt-3 text-sm font-bold text-rosedeep">{it.points_cost} NTime</p>
                   </button>
                 ))
               : visibleCatalogItems.map((it) => (
@@ -769,7 +769,7 @@ export default function PosScreen() {
               <div className="soft-panel flex items-center justify-between p-3.5">
                 <div>
                   <p className="font-semibold">{member.name}</p>
-                  <p className="text-xs text-sagegray">สิทธิ์ {member.points_balance} · สะสม ฿{baht(member.accumulated_baht)}</p>
+              <p className="text-xs text-sagegray">NTime {member.points_balance} · สะสม ฿{baht(member.accumulated_baht)}</p>
                 </div>
                 <button onClick={() => { setMember(null); setLinkCode(''); setCart((c) => c.filter((x) => x.item_type !== 'redemption')) }}
                   className="text-sagegray text-sm">เปลี่ยน</button>
@@ -789,7 +789,7 @@ export default function PosScreen() {
           </div>
           {member && !member.line_linked && (
             <div className="mb-3 rounded-xl border border-blush p-3 text-sm">
-              <p className="mb-2 font-medium text-ink">ยังไม่ผูก LINE — สะสมสิทธิ์ได้ แต่ต้องผูก LINE ก่อนใช้สิทธิ์</p>
+              <p className="mb-2 font-medium text-ink">ยังไม่ผูก LINE — สะสม NTime ได้ แต่ต้องผูก LINE ก่อนใช้ NTime</p>
               {linkCode ? (
                 <p>โค้ดผูก LINE (หมดอายุใน 10 นาที): <b className="text-lg tracking-widest">{linkCode}</b></p>
               ) : (
@@ -803,7 +803,7 @@ export default function PosScreen() {
             <div key={c.key} className="border-b border-mist py-3 last:border-0">
               <div className="flex justify-between">
                 <p className="font-medium">{c.name} {c.qty > 1 && `×${c.qty}`}</p>
-                <p>{c.item_type === 'redemption' ? `${c.points_cost} สิทธิ์` : `฿${baht(c.price * c.qty)}`}</p>
+                <p>{c.item_type === 'redemption' ? `${c.points_cost} NTime` : `฿${baht(c.price * c.qty)}`}</p>
               </div>
               {c.custom_price_reason && <p className="mt-1 text-xs text-sagegray">{c.custom_price_reason}</p>}
               <div className="flex justify-between items-center mt-1">
@@ -821,7 +821,7 @@ export default function PosScreen() {
           </div>
           {err && <p className="text-rosedeep text-sm mt-2">{err}</p>}
           <button onClick={checkout} disabled={!cart.length || busy} className="btn-rose w-full mt-3 disabled:opacity-40">
-            {busy ? 'กำลังสร้างบิล…' : total === 0 && cart.length ? 'ยืนยันบิลใช้สิทธิ์' : 'ชำระเงิน (QR)'}
+            {busy ? 'กำลังสร้างบิล…' : total === 0 && cart.length ? 'ยืนยันบิลใช้ NTime' : 'ชำระเงิน (QR)'}
           </button>
           </div>
         </aside>

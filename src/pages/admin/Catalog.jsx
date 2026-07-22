@@ -274,7 +274,7 @@ export default function Catalog() {
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">หมวดหมู่</span><select className="input" value={draft.category_id} onChange={(event) => setDraft({ ...draft, category_id: event.target.value })}><option value="">ยังไม่จัดหมวด</option>{categoriesFor(table === 'services' ? 'service' : 'product').map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{isVariablePrice ? "ช่วงราคา" : "ราคา (บาท)"}</span><input className="input" required disabled={isVariablePrice} inputMode="decimal" value={isVariablePrice ? `${baht(it.min_price)}–${baht(it.max_price)}` : draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} />{isVariablePrice && <span className="mt-1 block text-xs text-sagegray">POS จะขอราคาและรายละเอียดทุกครั้ง</span>}</label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ค่าคอม (%)</span><input className="input" required inputMode="decimal" value={draft.commission_pct} onChange={(event) => setDraft({ ...draft, commission_pct: event.target.value })} /></label>
-        <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.counts_toward_points} onChange={(event) => setDraft({ ...draft, counts_toward_points: event.target.checked })} />นับยอดสะสมสิทธิ์</label>
+        <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.counts_toward_points} onChange={(event) => setDraft({ ...draft, counts_toward_points: event.target.checked })} />นับยอดสะสม NTime</label>
       </div>
       <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditing(false)} disabled={saving} className="btn-ghost">ยกเลิก</button><button disabled={saving} className="btn-rose">{saving ? "กำลังบันทึก…" : "บันทึกการแก้ไข"}</button></div>
     </form>}
@@ -285,7 +285,7 @@ export default function Catalog() {
     <div className="w-full">
       <SettingsBackLink />
       <div className="page-heading">
-        <div><p className="page-eyebrow">Catalog</p><h1 className="page-title">บริการและสินค้า</h1><p className="page-description">จัดการราคา ค่าคอมมิชชัน สต็อก และรายการที่ร่วมสะสมสิทธิ์</p></div>
+        <div><p className="page-eyebrow">Catalog</p><h1 className="page-title">บริการและสินค้า</h1><p className="page-description">จัดการราคา ค่าคอมมิชชัน สต็อก และรายการที่ร่วมสะสม NTime</p></div>
       </div>
       {error && <p role="alert" className="mb-5 rounded-xl border border-danger/15 bg-danger/5 px-4 py-3 text-sm font-medium text-danger">{error}</p>}
       <section className="card mb-5 p-5 sm:p-6">
@@ -310,7 +310,7 @@ export default function Catalog() {
         <label className="mt-4 flex min-h-11 items-center gap-3 rounded-xl bg-porcelain px-3 text-sm font-medium text-sagegray sm:w-fit">
           <input type="checkbox" className="h-4 w-4 accent-rose" checked={form.counts}
             onChange={(e) => setForm({ ...form, counts: e.target.checked })} />
-          นับยอดสะสมสิทธิ์
+          นับยอดสะสม NTime
         </label>
       </section>
 

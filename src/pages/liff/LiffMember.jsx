@@ -115,7 +115,7 @@ export default function LiffMember() {
           <div className="relative">
             <span className="badge-rose">สมัครผ่าน LINE</span>
             <p className="mt-3 font-display text-3xl font-semibold text-ink">สมัครสมาชิก</p>
-            <p className="mt-2 max-w-md text-sm leading-6 text-sagegray">สะสมครบทุก ฿1,500 รับ 1 สิทธิ์แลกบริการฟรี สิทธิ์จะสะสมอัตโนมัติทุกครั้งที่ชำระเงิน</p>
+            <p className="mt-2 max-w-md text-sm leading-6 text-sagegray">สะสมครบทุก ฿1,500 รับ 1 NTime แลกบริการฟรี NTime จะสะสมอัตโนมัติทุกครั้งที่ชำระเงิน</p>
           </div>
         </div>
         <div className="p-5 sm:p-7">
@@ -142,7 +142,7 @@ export default function LiffMember() {
           )}
           {err && <p role="alert" className="mt-5 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm font-medium text-danger">{err}</p>}
           <button onClick={register} disabled={busy} className="btn-rose mt-6 w-full">
-            {busy ? 'กำลังสมัคร…' : 'สมัครและเริ่มสะสมสิทธิ์'}
+            {busy ? 'กำลังสมัคร…' : 'สมัครและเริ่มสะสม NTime'}
           </button>
         </div>
       </section>
@@ -155,7 +155,7 @@ export default function LiffMember() {
   const hasPending = me.pending.length > 0
   const srcLabel = {
     order_paid: 'สะสมจากบิล', order_void: 'คืนแต้มจากบิลยกเลิก',
-    redemption: 'ใช้สิทธิ์', redemption_refund: 'คืนสิทธิ์จากบิลยกเลิก',
+    redemption: 'ใช้ NTime', redemption_refund: 'คืน NTime จากบิลยกเลิก',
     manual_adjust: 'ปรับโดยร้าน',
   }
 
@@ -183,15 +183,15 @@ export default function LiffMember() {
 
             <div className="mt-9 flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-medium text-white/70">สิทธิ์พร้อมใช้</p>
-                <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums sm:text-6xl">{m.points_balance}<span className="ml-2 text-xl font-medium text-white/75">สิทธิ์</span></p>
+                <p className="text-xs font-medium text-white/70">NTime พร้อมใช้</p>
+                <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums sm:text-6xl">{m.points_balance}<span className="ml-2 text-xl font-medium text-white/75">NTime</span></p>
               </div>
               <p className="pb-1 text-right text-sm font-medium text-white/85">ยอดสะสม<br /><span className="font-display text-xl font-semibold tabular-nums text-white">฿{baht(m.accumulated_baht)}</span></p>
             </div>
 
             <div className="mt-8 border-t border-white/20 pt-4">
               <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/80">
-                <span>อีก ฿{baht(toNext)} รับเพิ่ม 1 สิทธิ์</span>
+                <span>อีก ฿{baht(toNext)} รับเพิ่ม 1 NTime</span>
                 <span>{Math.round(pct)}%</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/20" aria-label={`สะสมแล้ว ${Math.round(pct)} เปอร์เซ็นต์`}>
@@ -205,17 +205,17 @@ export default function LiffMember() {
           <div className="grid gap-5">
             <section className="card border-rose/35 bg-[linear-gradient(135deg,#fff_0%,#fff6f7_100%)] p-5 sm:p-6">
               <span className="badge-rose">รอการยืนยัน</span>
-              <p className="mt-3 font-display text-2xl font-semibold text-ink">ยืนยันใช้สิทธิ์</p>
-              <p className="mt-1 text-sm leading-6 text-sagegray">กรุณาตรวจสอบรายการก่อนยืนยัน ระบบจะหักสิทธิ์หลังยืนยัน</p>
+              <p className="mt-3 font-display text-2xl font-semibold text-ink">ยืนยันใช้ NTime</p>
+              <p className="mt-1 text-sm leading-6 text-sagegray">กรุณาตรวจสอบรายการก่อนยืนยัน ระบบจะหัก NTime หลังยืนยัน</p>
               {err && <p role="alert" className="mt-4 rounded-xl bg-danger/5 px-3 py-2 text-sm text-danger">{err}</p>}
               {me.pending.map((p) => (
                 <div key={p.id} className="mt-4 rounded-2xl border border-mist bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-semibold text-ink">{p.reward}</p>
-                    <span className="badge-neutral shrink-0">{p.points_cost} สิทธิ์</span>
+                    <span className="badge-neutral shrink-0">{p.points_cost} NTime</span>
                   </div>
                   <button onClick={() => confirmRedeem(p.id)} disabled={busy} className="btn-rose mt-4 w-full">
-                    {busy ? 'กำลังยืนยัน…' : 'ยืนยันใช้สิทธิ์'}
+                    {busy ? 'กำลังยืนยัน…' : 'ยืนยันใช้ NTime'}
                   </button>
                 </div>
               ))}
@@ -226,15 +226,15 @@ export default function LiffMember() {
         <section className={`card overflow-hidden ${hasPending ? 'lg:col-span-2' : ''}`}>
           <div className="flex items-center justify-between border-b border-mist px-5 py-5 sm:px-6">
             <div>
-              <p className="section-title">ประวัติสิทธิ์ล่าสุด</p>
-              <p className="mt-1 text-sm text-sagegray">รายการสะสมและการใช้สิทธิ์ของคุณ</p>
+              <p className="section-title">ประวัติ NTime ล่าสุด</p>
+              <p className="mt-1 text-sm text-sagegray">รายการสะสมและการใช้ NTime ของคุณ</p>
             </div>
             <span className="badge-neutral">{me.history.length} รายการ</span>
           </div>
           {me.history.length === 0 ? (
             <div className="px-5 py-10 text-center sm:px-6">
-              <p className="font-medium text-ink">ยังไม่มีประวัติสิทธิ์</p>
-              <p className="mt-1 text-sm text-sagegray">สิทธิ์สะสมจะแสดงที่นี่หลังชำระเงินครั้งแรก</p>
+              <p className="font-medium text-ink">ยังไม่มีประวัติ NTime</p>
+              <p className="mt-1 text-sm text-sagegray">NTime สะสมจะแสดงที่นี่หลังชำระเงินครั้งแรก</p>
             </div>
           ) : (
             <div className="divide-y divide-mist px-5 sm:px-6">
@@ -245,7 +245,7 @@ export default function LiffMember() {
                     <p className="mt-1 text-xs text-sagegray">{formatHistoryDate(h.at)}</p>
                   </div>
                   <span className={h.change > 0 ? 'shrink-0 font-semibold tabular-nums text-success' : 'shrink-0 font-semibold tabular-nums text-rosedeep'}>
-                    {h.change > 0 ? '+' : ''}{h.change} สิทธิ์
+                    {h.change > 0 ? '+' : ''}{h.change} NTime
                   </span>
                 </div>
               ))}

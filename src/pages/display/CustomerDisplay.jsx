@@ -160,10 +160,10 @@ export default function CustomerDisplay() {
         <p className="mt-2 text-4xl font-bold tabular-nums">฿{baht(order.total)}</p>
         {member && (
           <p className="soft-panel mt-6 p-4 text-lg font-semibold text-rosedeep">
-            สิทธิ์สะสมของคุณ{member.name}: {member.points_balance} สิทธิ์
+            NTime สะสมของคุณ{member.name}: {member.points_balance} NTime
           </p>
         )}
-        <p className="mt-4 text-sm text-sagegray">ตรวจสอบสิทธิ์ได้ทาง LINE ทันที</p>
+        <p className="mt-4 text-sm text-sagegray">ตรวจสอบ NTime ได้ทาง LINE ทันที</p>
       </div>
     </Screen>
   )
@@ -185,7 +185,7 @@ export default function CustomerDisplay() {
           <p className="mt-2 font-display text-3xl font-semibold">รายการของคุณ</p>
           {member && (
             <p className="text-sm text-sagegray mt-1">
-              คุณ{member.name} · สิทธิ์ {member.points_balance} · สะสม ฿{baht(member.accumulated_baht)}
+              คุณ{member.name} · NTime {member.points_balance} · สะสม ฿{baht(member.accumulated_baht)}
             </p>
           )}
           <div className="mt-6 space-y-1">
@@ -281,7 +281,7 @@ function IdleSignage({ branch, campaign }) {
         <div className="my-auto max-w-3xl py-14 sm:py-20">
           <p className={(hasCampaignMedia ? 'text-white/90' : 'text-rosedeep') + ' text-sm font-bold uppercase tracking-[0.22em]'}>Nail Time Member</p>
           <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.06] tracking-tight sm:text-6xl lg:text-8xl">สวยในแบบคุณ<br />ทุกวัน</h1>
-          <p className={(hasCampaignMedia ? 'text-white/85' : 'text-sagegray') + ' mt-7 max-w-xl text-lg leading-8 sm:text-xl'}>สะสมยอดครบทุก ฿1,500 รับ 1 สิทธิ์ เพื่อแลกบริการฟรี</p>
+          <p className={(hasCampaignMedia ? 'text-white/85' : 'text-sagegray') + ' mt-7 max-w-xl text-lg leading-8 sm:text-xl'}>สะสมยอดครบทุก ฿1,500 รับ 1 NTime เพื่อแลกบริการฟรี</p>
           <div className={(hasCampaignMedia ? 'border-white/20 bg-white/10' : 'border-rose/15 bg-white/70') + ' mt-9 inline-flex items-center gap-3 rounded-2xl border px-5 py-4 backdrop-blur-sm'}>
             <span className={(hasCampaignMedia ? 'bg-white text-rosedeep' : 'bg-rose text-white') + ' grid h-9 w-9 place-items-center rounded-xl text-sm font-bold'}>LINE</span>
             <div><p className="text-xs font-semibold uppercase tracking-wider opacity-70">สิทธิพิเศษสำหรับสมาชิก</p><p className="mt-0.5 font-semibold">เพิ่มเพื่อน @nailtimetk22</p></div>

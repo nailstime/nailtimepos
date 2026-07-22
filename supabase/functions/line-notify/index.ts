@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
     const text =
       `✅ ชำระเงินเรียบร้อย\n` +
       `ยอดชำระ ฿${Number(order.total).toLocaleString("th-TH")}\n` +
-      `สะสมอีก ฿${toNext.toLocaleString("th-TH")} รับ 1 สิทธิ์\n` +
-      `สิทธิ์คงเหลือ: ${member.points_balance} สิทธิ์\n\n` +
+      `สะสมอีก ฿${toNext.toLocaleString("th-TH")} รับ 1 NTime\n` +
+      `NTime คงเหลือ: ${member.points_balance} NTime\n\n` +
       "ขอบคุณที่ใช้บริการ Nail Time & Spa 💅"
 
     const response = await fetch("https://api.line.me/v2/bot/message/push", {

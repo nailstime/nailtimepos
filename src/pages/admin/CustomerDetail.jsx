@@ -75,7 +75,7 @@ export default function CustomerDetail() {
               <p className="mt-1 text-sm text-sagegray">วันเกิด {dateOnlyThai(member.birth_date)}</p>
             </div>
           </div>
-          <span className="badge-rose">คงเหลือ {member.points_balance} สิทธิ์</span>
+          <span className="badge-rose">คงเหลือ {member.points_balance} NTime</span>
         </div>
       </section>
 
