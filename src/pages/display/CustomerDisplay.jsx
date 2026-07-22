@@ -44,6 +44,10 @@ export default function CustomerDisplay() {
   const [member, setMember] = useState(null)
   const [campaign, setCampaign] = useState(null)
   const [authorized, setAuthorized] = useState(null)
+  const [pairingCounterCode, setPairingCounterCode] = useState(scannedCounterCode)
+  const [pairingCode, setPairingCode] = useState('')
+  const [pairingBusy, setPairingBusy] = useState(false)
+  const [pairingError, setPairingError] = useState('')
 
   useEffect(() => {
     if (!scannedDisplayToken) return
@@ -54,14 +58,12 @@ export default function CustomerDisplay() {
   }, [scannedCounterCode, scannedDisplayToken])
 
   const load = useCallback(async () => {
-    if (!displayToken) { setAuthorized(false); return }
+    if (!displayToken) return
     const { data, error } = await supabase.rpc('get_customer_display', {
       p_counter_code: counterCode,
       p_display_token: displayToken,
     })
     if (error || !data) {
-      clearStoredDisplayCredential()
-      setCredential(null)
       setAuthorized(false)
       return
     }
@@ -74,17 +76,71 @@ export default function CustomerDisplay() {
   }, [counterCode, displayToken])
 
   useEffect(() => {
+    if (!displayToken) return
     load()
     const timer = setInterval(load, 1500)
     return () => clearInterval(timer)
-  }, [load])
+  }, [displayToken, load])
+
+  async function pairDisplay(event) {
+    event.preventDefault()
+    const nextCounterCode = pairingCounterCode.trim().toUpperCase()
+    const nextPairingCode = pairingCode.trim().toUpperCase()
+    if (!nextCounterCode || !nextPairingCode) {
+      setPairingError('กรุณากรอก Counter และรหัสจับคู่')
+      return
+    }
+    setPairingBusy(true)
+    setPairingError('')
+    const { data, error } = await supabase.rpc('pair_customer_display', {
+      p_counter_code: nextCounterCode,
+      p_pairing_code: nextPairingCode,
+    })
+    setPairingBusy(false)
+    if (error || !data?.device_token) {
+      setPairingError(error?.message === 'pairing code is invalid or expired'
+        ? 'รหัสจับคู่ไม่ถูกต้องหรือหมดอายุแล้ว'
+        : (error?.message || 'ไม่สามารถจับคู่จอได้'))
+      return
+    }
+    const nextCredential = { counterCode: data.counter_code, displayToken: data.device_token }
+    storeDisplayCredential(nextCredential)
+    setCredential(nextCredential)
+    setPairingCode('')
+    setAuthorized(null)
+    window.history.replaceState(window.history.state, '', `/display?counter=${encodeURIComponent(data.counter_code)}`)
+  }
+
+  function resetPairing() {
+    clearStoredDisplayCredential()
+    setCredential(null)
+    setPairingCounterCode(counterCode)
+    setPairingCode('')
+    setPairingError('')
+    setAuthorized(null)
+  }
+
+  if (!displayToken) return (
+    <Screen>
+      <DisplayPairing
+        counterCode={pairingCounterCode}
+        pairingCode={pairingCode}
+        busy={pairingBusy}
+        error={pairingError}
+        onCounterCodeChange={(value) => setPairingCounterCode(value.toUpperCase())}
+        onPairingCodeChange={(value) => setPairingCode(value.toUpperCase())}
+        onSubmit={pairDisplay}
+      />
+    </Screen>
+  )
 
   if (authorized === false) return (
     <Screen>
       <div className="card max-w-md p-8 text-center">
         <AlertMark className="mx-auto" />
         <p className="mt-5 font-display text-2xl font-semibold">จอลูกค้ายังไม่ได้รับอนุญาต</p>
-        <p className="mt-2 text-sm leading-6 text-sagegray">สแกน QR ของ Counter นี้อีกครั้ง หรือติดต่อ Owner เพื่อสร้าง QR ใหม่</p>
+        <p className="mt-2 text-sm leading-6 text-sagegray">รหัสเดิมอาจถูกยกเลิกแล้ว โปรดขอรหัสจับคู่ใหม่จาก Owner</p>
+        <button type="button" onClick={resetPairing} className="btn-rose mt-6 w-full">จับคู่จอใหม่</button>
       </div>
     </Screen>
   )
@@ -165,6 +221,24 @@ export default function CustomerDisplay() {
       </div>
       </div>
     </Screen>
+  )
+}
+
+function DisplayPairing({ counterCode, pairingCode, busy, error, onCounterCodeChange, onPairingCodeChange, onSubmit }) {
+  return (
+    <form onSubmit={onSubmit} className="card w-full max-w-md p-7 sm:p-9">
+      <BrandMark compact />
+      <p className="page-eyebrow mt-8">Customer display</p>
+      <h1 className="mt-2 font-display text-3xl font-semibold">จับคู่จอลูกค้า</h1>
+      <p className="mt-3 text-sm leading-6 text-sagegray">ขอรหัสจับคู่ชั่วคราวจาก Owner ในเมนู ตั้งค่าระบบ › สาขาและ Counter แล้วกรอกด้านล่าง</p>
+      {error && <p role="alert" className="mt-5 rounded-xl border border-danger/20 bg-danger/5 px-3 py-2.5 text-sm font-medium text-danger">{error}</p>}
+      <div className="mt-6 grid gap-4 sm:grid-cols-[.7fr_1.3fr]">
+        <label className="block"><span className="mb-1.5 block text-sm font-semibold">Counter</span><input className="input uppercase" required maxLength={20} value={counterCode} onChange={(event) => onCounterCodeChange(event.target.value)} disabled={busy} /></label>
+        <label className="block"><span className="mb-1.5 block text-sm font-semibold">รหัสจับคู่ 8 ตัว</span><input className="input font-mono uppercase tracking-[0.18em]" required inputMode="text" autoCapitalize="characters" autoCorrect="off" spellCheck="false" maxLength={8} placeholder="เช่น A1B2C3D4" value={pairingCode} onChange={(event) => onPairingCodeChange(event.target.value.replace(/[^a-fA-F0-9]/g, ''))} disabled={busy} /></label>
+      </div>
+      <button disabled={busy} className="btn-rose mt-6 w-full">{busy ? 'กำลังจับคู่…' : 'ยืนยันการจับคู่'}</button>
+      <p className="mt-4 text-center text-xs leading-5 text-sagegray">รหัสใช้ได้ครั้งเดียวและหมดอายุใน 10 นาที เครื่องนี้จะจำการเชื่อมต่อไว้แม้ปิดแล้วเปิด PWA ใหม่</p>
+    </form>
   )
 }
 

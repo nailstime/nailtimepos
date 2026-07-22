@@ -11,6 +11,7 @@ export default function BranchCounters() {
   const [form, setForm] = useState({ name: '', promptpay_id: '' })
   const [counterCode, setCounterCode] = useState('')
   const [secret, setSecret] = useState(null)
+  const [pairingSecret, setPairingSecret] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -60,7 +61,7 @@ export default function BranchCounters() {
       cancelLabel: 'ยกเลิก',
     })
     if (!approved) return
-    setSaving(true); setError(''); setNotice(''); setSecret(null)
+    setSaving(true); setError(''); setNotice(''); setSecret(null); setPairingSecret(null)
     const { data, error: rpcError } = await supabase.rpc('create_branch_counter', { p_code: code })
     setSaving(false)
     if (rpcError) return setError(rpcError.message)
@@ -79,12 +80,28 @@ export default function BranchCounters() {
       tone: 'danger',
     })
     if (!approved) return
-    setSaving(true); setError(''); setNotice(''); setSecret(null)
+    setSaving(true); setError(''); setNotice(''); setSecret(null); setPairingSecret(null)
     const { data, error: rpcError } = await supabase.rpc('rotate_counter_display_token', { p_counter: counter.id })
     setSaving(false)
     if (rpcError) return setError(rpcError.message)
     setSecret(data)
     setNotice(`สร้าง token ใหม่สำหรับ ${data.code} แล้ว`)
+  }
+
+  async function createPairingCode(counter) {
+    const approved = await confirm({
+      title: `สร้างรหัสจับคู่จอ ${counter.code}`,
+      description: 'รหัสใช้ได้หนึ่งครั้งและหมดอายุใน 10 นาที รหัสเดิมที่ยังไม่ได้ใช้จะถูกยกเลิก',
+      confirmLabel: 'สร้างรหัสจับคู่',
+      cancelLabel: 'ยกเลิก',
+    })
+    if (!approved) return
+    setSaving(true); setError(''); setNotice(''); setPairingSecret(null)
+    const { data, error: rpcError } = await supabase.rpc('create_customer_display_pairing_code', { p_counter: counter.id })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    setPairingSecret(data)
+    setNotice(`สร้างรหัสจับคู่จอ ${data.code} แล้ว — กรอกบน PWA จอลูกค้าภายใน 10 นาที`)
   }
 
   async function copyDisplayUrl() {
@@ -121,10 +138,19 @@ export default function BranchCounters() {
 
       {secret && <section className="card mt-5 border-rose/25 p-5 sm:p-6"><div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"><div className="min-w-0 flex-1"><p className="section-title">ตั้งค่าจอลูกค้า · {secret.code}</p><p className="section-note">สแกน QR นี้จากเครื่องจอลูกค้า แล้วบันทึกหน้านั้นไว้เป็น Bookmark หรือเปิดเต็มหน้าจอ</p><div className="mt-4 flex flex-col gap-2 sm:flex-row"><button type="button" onClick={copyDisplayUrl} className="btn-rose">คัดลอกลิงก์</button><span className="flex min-h-11 items-center text-xs text-sagegray">ลิงก์นี้จะแสดงหลังสร้างหรือหมุน token เท่านั้น</span></div><input className="input mt-4 font-mono text-xs" value={displayUrl} readOnly aria-label="ลิงก์จอลูกค้า" onFocus={(event) => event.target.select()} /></div><div className="shrink-0 self-center rounded-2xl border border-mist bg-white p-3 shadow-sm"><QRCodeSVG value={displayUrl} size={168} includeMargin aria-label={`QR code สำหรับจอลูกค้า Counter ${secret.code}`} /></div></div></section>}
 
+      {pairingSecret && <section className="card mt-5 border-rose/25 p-5 sm:p-6">
+        <p className="section-title">รหัสจับคู่จอลูกค้า · {pairingSecret.code}</p>
+        <p className="section-note mt-1">เปิด PWA จอลูกค้า แล้วกรอก Counter และรหัสนี้ รหัสจะใช้ได้ครั้งเดียวภายใน 10 นาที</p>
+        <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <code className="rounded-2xl border border-rose/20 bg-rose/5 px-5 py-4 text-center font-mono text-3xl font-bold tracking-[0.22em] text-rosedeep">{pairingSecret.pairing_code}</code>
+          <p className="max-w-sm text-sm leading-6 text-sagegray">หลังจับคู่สำเร็จ เครื่องจอนี้จะเปิดใช้งานได้ต่อแม้ปิดและเปิด PWA ใหม่ โดยไม่ต้องสแกน QR ซ้ำ</p>
+        </div>
+      </section>}
+
       <section className="card mt-5 overflow-hidden">
         <div className="flex items-center justify-between border-b border-mist px-5 py-4 sm:px-6"><div><p className="section-title">Counter ในสาขานี้</p><p className="section-note">หมุน token เมื่อเปลี่ยนเครื่องจอลูกค้า หรือสงสัยว่าลิงก์เดิมรั่ว</p></div><span className="badge-neutral">{counters.length}</span></div>
         <div className="px-5 py-2 sm:px-6">
-          {counters.map((counter) => <div key={counter.id} className="data-row grid-cols-[minmax(0,1fr)_auto]"><div><p className="font-semibold">{counter.code}</p><p className="mt-1 text-xs text-sagegray">{counter.has_open_order ? 'กำลังมีบิลเปิดอยู่' : 'พร้อมรับบิล'}</p></div><button type="button" onClick={() => rotateToken(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">สร้าง token ใหม่</button></div>)}
+          {counters.map((counter) => <div key={counter.id} className="data-row grid-cols-[minmax(0,1fr)_auto]"><div><p className="font-semibold">{counter.code}</p><p className="mt-1 text-xs text-sagegray">{counter.has_open_order ? 'กำลังมีบิลเปิดอยู่' : 'พร้อมรับบิล'}</p></div><div className="flex items-center gap-1"><button type="button" onClick={() => createPairingCode(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">รหัสจับคู่จอ</button><button type="button" onClick={() => rotateToken(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">สร้าง token ใหม่</button></div></div>)}
           {!loading && counters.length === 0 && <div className="empty-state my-3">ยังไม่มี Counter — เพิ่ม Counter ด้านบนเพื่อเริ่มใช้งาน</div>}
         </div>
       </section>
