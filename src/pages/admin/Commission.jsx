@@ -4,11 +4,10 @@ import { baht, bangkokMonthStr } from "../../lib/format"
 import SettingsBackLink from "../../components/SettingsBackLink.jsx"
 
 const thisMonth = () => bangkokMonthStr()
-const nextMonth = () => {
-  const [year, month] = bangkokMonthStr().split('-').map(Number)
-  const next = new Date(Date.UTC(year, month, 1))
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`
-}
+const dateTimeLabel = (value) => value ? new Intl.DateTimeFormat('th-TH', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok',
+}).format(new Date(value)) : ''
+const editUntilLabel = (value) => value ? dateTimeLabel(new Date(new Date(value).getTime() - 60_000)) : ''
 
 const defaultTiers = [{ max_amount: "", pct: "3" }]
 
@@ -32,7 +31,7 @@ export default function Commission() {
       supabase.from("commission_settings")
         .select("team_minimum_amount")
         .eq("branch_id", branch.id)
-        .eq("effective_month", nextMonth())
+        .eq("effective_month", selectedMonth)
         .maybeSingle(),
     ])
     if (reportError) return setMsg(reportError.message)
@@ -43,7 +42,7 @@ export default function Commission() {
       const { data: savedTiers, error: tiersError } = await supabase.from("commission_tiers")
         .select("min_amount,max_amount,pct")
         .eq("branch_id", branch.id)
-        .eq("effective_month", nextMonth())
+        .eq("effective_month", selectedMonth)
         .order("min_amount")
       if (tiersError) return setMsg(tiersError.message)
       setTeamMinimum(String(config.team_minimum_amount ?? 0))
@@ -52,6 +51,9 @@ export default function Commission() {
         pct: String(tier.pct),
       }))
       setTiers(nextTiers.length > 0 ? nextTiers : defaultTiers)
+    } else {
+      setTeamMinimum("")
+      setTiers(defaultTiers)
     }
   }, [])
 
@@ -59,7 +61,7 @@ export default function Commission() {
 
   const tierStart = (index) => index === 0 ? teamMinimum : tiers[index - 1]?.max_amount
 
-  async function saveNextMonth() {
+  async function saveCommissionSettings() {
     setMsg("")
     const minimum = Number(teamMinimum)
     if (!Number.isFinite(minimum) || minimum < 0) return setMsg("ยอดทีมขั้นต่ำต้องเป็นจำนวนเงินตั้งแต่ ฿0 ขึ้นไป")
@@ -82,13 +84,13 @@ export default function Commission() {
 
     setSaving(true)
     const { error } = await supabase.rpc("save_team_commission_configuration", {
-      p_effective_month: nextMonth(),
+      p_effective_month: month,
       p_team_minimum_amount: minimum,
       p_tiers: payload,
     })
     setSaving(false)
     if (error) return setMsg(error.message)
-    setMsg(`บันทึกกติกาคอมของเดือน ${nextMonth()} แล้ว — ไม่มีผลย้อนหลัง`)
+    setMsg(`บันทึกกติกาคอมรอบ ${month} แล้ว`)
     load(month)
   }
 
@@ -113,7 +115,7 @@ export default function Commission() {
           </div>
           <div className="p-5">
             {!report && <div className="empty-state">กำลังโหลดรายงาน…</div>}
-            {report && !report.configured && <div className="empty-state">ยังไม่มีกติกาคอมสำหรับเดือนนี้</div>}
+            {report && !report.configured && <div className="empty-state">ยังไม่มีกติกาคอมสำหรับรอบนี้</div>}
             {report?.configured && <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric label="ยอดสุทธิทีม" value={`฿${baht(report.team_net_sales)}`} />
@@ -140,12 +142,12 @@ export default function Commission() {
         </section>
 
         <section className="card p-5 sm:p-6">
-          <p className="section-title">ตั้งค่าคอมเดือนถัดไป</p>
-          <p className="section-note">รอบ {nextMonth()} · ปรับได้เฉพาะเดือนถัดไปเพื่อให้รายงานย้อนหลังคงเดิม</p>
+          <p className="section-title">ตั้งค่าคอมรอบ {month}</p>
+          <p className="section-note">{report?.finalized ? `ระบบปิดและ snapshot ผลแล้วเมื่อ ${dateTimeLabel(report.close_at)}` : report?.can_edit ? `แก้ไขได้ถึง ${editUntilLabel(report.close_at)}` : "รอบนี้ปิดแล้ว ระบบจะคำนวณและล็อกผลอัตโนมัติ"}</p>
 
           <label className="mt-5 block">
             <span className="mb-1.5 block text-sm font-semibold text-ink">ยอดสุทธิทีมขั้นต่ำเพื่อเริ่มจ่ายคอม</span>
-            <input className="input" inputMode="decimal" placeholder="เช่น 30000" value={teamMinimum} onChange={(event) => setTeamMinimum(event.target.value)} />
+            <input disabled={!report?.can_edit} className="input" inputMode="decimal" placeholder="เช่น 30000" value={teamMinimum} onChange={(event) => setTeamMinimum(event.target.value)} />
             <span className="mt-1.5 block text-xs text-sagegray">หากยอดทีมต่ำกว่านี้ พนักงานทุกคนจะไม่ได้รับค่าคอม</span>
           </label>
 
@@ -157,19 +159,19 @@ export default function Commission() {
                 return <div key={index} className="rounded-2xl border border-mist bg-porcelain/45 p-3">
                   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_90px_auto] sm:items-end">
                     <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ตั้งแต่</span><div className="input flex items-center bg-white/65 text-sagegray">฿{Number(tierStart(index) || 0).toLocaleString('th-TH')}</div></label>
-                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ถึง</span><input className="input" disabled={isLast} placeholder={isLast ? "ไม่จำกัด" : "เช่น 50000"} inputMode="decimal" value={tier.max_amount} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, max_amount: event.target.value } : item))} /></label>
-                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">คอม %</span><input className="input" placeholder="3" inputMode="decimal" value={tier.pct} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, pct: event.target.value } : item))} /></label>
-                    <button type="button" onClick={() => setTiers(tiers.filter((_, itemIndex) => itemIndex !== index))} disabled={tiers.length === 1} className="btn-danger text-sm">ลบ</button>
+                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ถึง</span><input className="input" disabled={isLast || !report?.can_edit} placeholder={isLast ? "ไม่จำกัด" : "เช่น 50000"} inputMode="decimal" value={tier.max_amount} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, max_amount: event.target.value } : item))} /></label>
+                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">คอม %</span><input className="input" disabled={!report?.can_edit} placeholder="3" inputMode="decimal" value={tier.pct} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, pct: event.target.value } : item))} /></label>
+                    <button type="button" onClick={() => setTiers(tiers.filter((_, itemIndex) => itemIndex !== index))} disabled={tiers.length === 1 || !report?.can_edit} className="btn-danger text-sm">ลบ</button>
                   </div>
                   {isLast && <p className="mt-2 text-xs text-sagegray">Tier สุดท้ายไม่มีเพดานยอด</p>}
                 </div>
               })}
             </div>
-            <button type="button" className="btn-ghost mt-3 w-full" onClick={() => setTiers([...tiers.map((tier, index) => index === tiers.length - 1 ? { ...tier, max_amount: tier.max_amount } : tier), { max_amount: "", pct: "" }])}>+ เพิ่ม Tier</button>
+            <button type="button" disabled={!report?.can_edit} className="btn-ghost mt-3 w-full" onClick={() => setTiers([...tiers.map((tier, index) => index === tiers.length - 1 ? { ...tier, max_amount: tier.max_amount } : tier), { max_amount: "", pct: "" }])}>+ เพิ่ม Tier</button>
           </div>
 
           <p className="mt-5 rounded-xl bg-porcelain px-3 py-3 text-sm leading-6 text-sagegray">โบนัสรายพนักงานตั้งค่าได้ในหน้า “พนักงานและสมาชิก” โดยจะบวกจากอัตรา Tier ของทีม เช่น Tier 3% + โบนัส 1% = 4%</p>
-          <button type="button" onClick={saveNextMonth} disabled={saving} className="btn-rose mt-5 w-full">{saving ? "กำลังบันทึก…" : "บันทึกกติกาเดือนถัดไป"}</button>
+          <button type="button" onClick={saveCommissionSettings} disabled={saving || !report?.can_edit} className="btn-rose mt-5 w-full">{saving ? "กำลังบันทึก…" : report?.can_edit ? "บันทึกกติกาคอม" : "รอบนี้ปิดแล้ว"}</button>
         </section>
       </div>
     </div>
