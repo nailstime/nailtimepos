@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
     return json(req, { error: "invalid_action" }, 400)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    console.error("line-member request rejected", { message })
     const status = message.includes("identity") || message.includes("token") ? 401 : 400
     return json(req, { error: message }, status)
   }

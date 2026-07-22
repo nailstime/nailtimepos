@@ -162,38 +162,40 @@ export default function LiffMember() {
     <Wrap>
       <Brand />
       <div className="grid w-full gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] lg:items-start">
-        <section className="relative overflow-hidden rounded-[30px] bg-[linear-gradient(135deg,#38252c_0%,#22181c_56%,#804657_145%)] p-6 text-white shadow-lift sm:p-8">
-          <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-rose/30 blur-3xl" aria-hidden="true" />
-          <div className="absolute -bottom-16 left-1/3 h-36 w-36 rounded-full bg-white/5 blur-3xl" aria-hidden="true" />
+        <section className="relative isolate overflow-hidden rounded-[30px] border border-rose/20 bg-[linear-gradient(135deg,#c76c7e_0%,#ab5267_48%,#77394c_100%)] p-6 text-white shadow-lift sm:p-8">
+          <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full border-[22px] border-white/10" aria-hidden="true" />
+          <div className="absolute -bottom-24 -left-14 h-44 w-44 rounded-full bg-[#f8d9dd]/20 blur-2xl" aria-hidden="true" />
+          <div className="absolute inset-3 rounded-[22px] border border-white/15" aria-hidden="true" />
           <div className="relative">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rosepale">Nail Time Member</p>
-                <p className="mt-3 font-display text-3xl font-semibold leading-tight">คุณ {m.name}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">Nail Time & Spa</p>
+                <p className="mt-1 text-sm font-medium text-white/80">Membership card</p>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wide text-white/90">ACTIVE</span>
+              <span className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[11px] font-bold tracking-[0.12em] text-white backdrop-blur-sm">MEMBER</span>
             </div>
 
-            <div className="mt-8 grid grid-cols-[1fr_auto] items-end gap-4">
+            <div className="mt-10 sm:mt-12">
+              <p className="text-xs font-medium tracking-wide text-white/70">ชื่อสมาชิก</p>
+              <p className="mt-1 font-display text-4xl font-semibold tracking-tight sm:text-5xl">{m.name}</p>
+            </div>
+
+            <div className="mt-9 flex items-end justify-between gap-4">
               <div>
-                <p className="font-display text-7xl font-semibold leading-none tabular-nums text-white sm:text-8xl">{m.points_balance}</p>
-                <p className="mt-3 text-sm font-medium text-white/70">สิทธิ์พร้อมใช้</p>
+                <p className="text-xs font-medium text-white/70">สิทธิ์พร้อมใช้</p>
+                <p className="mt-1 font-display text-5xl font-semibold leading-none tabular-nums sm:text-6xl">{m.points_balance}<span className="ml-2 text-xl font-medium text-white/75">สิทธิ์</span></p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-right backdrop-blur-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">ยอดสะสม</p>
-                <p className="mt-1 font-display text-2xl font-semibold tabular-nums">฿{baht(m.accumulated_baht)}</p>
-              </div>
+              <p className="pb-1 text-right text-sm font-medium text-white/85">ยอดสะสม<br /><span className="font-display text-xl font-semibold tabular-nums text-white">฿{baht(m.accumulated_baht)}</span></p>
             </div>
 
-            <div className="mt-8 border-t border-white/10 pt-5">
-              <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-                <span className="text-white/70">สะสมครบ ฿{baht(me.threshold)} รับเพิ่ม 1 สิทธิ์</span>
-                <span className="shrink-0 font-semibold text-rosepale">อีก ฿{baht(toNext)}</span>
+            <div className="mt-8 border-t border-white/20 pt-4">
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs text-white/80">
+                <span>อีก ฿{baht(toNext)} รับเพิ่ม 1 สิทธิ์</span>
+                <span>{Math.round(pct)}%</span>
               </div>
-              <div className="h-3 overflow-hidden rounded-full bg-white/10" aria-label={`สะสมแล้ว ${Math.round(pct)} เปอร์เซ็นต์`}>
-                <div className="h-full rounded-full bg-[linear-gradient(90deg,#e7a3ad,#c56b7c)] transition-[width] duration-300" style={{ width: pct + '%' }} />
+              <div className="h-2 overflow-hidden rounded-full bg-white/20" aria-label={`สะสมแล้ว ${Math.round(pct)} เปอร์เซ็นต์`}>
+                <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: pct + '%' }} />
               </div>
-              <p className="mt-3 text-xs leading-5 text-white/55">สิทธิ์จะเพิ่มให้อัตโนมัติหลังพนักงานยืนยันการชำระเงิน</p>
             </div>
           </div>
         </section>
