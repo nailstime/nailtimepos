@@ -152,6 +152,7 @@ export default function LiffMember() {
   const m = me.member
   const toNext = Math.max(0, Number(me.threshold) - Number(m.accumulated_baht))
   const pct = Math.min(100, (Number(m.accumulated_baht) / Number(me.threshold)) * 100)
+  const hasPending = me.pending.length > 0
   const srcLabel = {
     order_paid: 'สะสมจากบิล', order_void: 'คืนแต้มจากบิลยกเลิก',
     redemption: 'ใช้สิทธิ์', redemption_refund: 'คืนสิทธิ์จากบิลยกเลิก',
@@ -161,7 +162,7 @@ export default function LiffMember() {
   return (
     <Wrap>
       <Brand />
-      <div className="grid w-full gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] lg:items-start">
+      <div className={`grid w-full gap-5 lg:items-start ${hasPending ? 'lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]' : 'mx-auto max-w-3xl'}`}>
         <section className="relative isolate overflow-hidden rounded-[30px] border border-rose/20 bg-[linear-gradient(135deg,#c76c7e_0%,#ab5267_48%,#77394c_100%)] p-6 text-white shadow-lift sm:p-8">
           <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full border-[22px] border-white/10" aria-hidden="true" />
           <div className="absolute -bottom-24 -left-14 h-44 w-44 rounded-full bg-[#f8d9dd]/20 blur-2xl" aria-hidden="true" />
@@ -200,8 +201,8 @@ export default function LiffMember() {
           </div>
         </section>
 
-        <div className="grid gap-5">
-          {me.pending.length > 0 ? (
+        {hasPending && (
+          <div className="grid gap-5">
             <section className="card border-rose/35 bg-[linear-gradient(135deg,#fff_0%,#fff6f7_100%)] p-5 sm:p-6">
               <span className="badge-rose">รอการยืนยัน</span>
               <p className="mt-3 font-display text-2xl font-semibold text-ink">ยืนยันใช้สิทธิ์</p>
@@ -219,23 +220,10 @@ export default function LiffMember() {
                 </div>
               ))}
             </section>
-          ) : (
-            <section className="card overflow-hidden p-5 sm:p-6">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose/10 text-rosedeep" aria-hidden="true">
-                <CheckIcon />
-              </div>
-              <p className="mt-4 font-display text-2xl font-semibold text-ink">สิทธิ์ของคุณพร้อมใช้</p>
-              <p className="mt-2 text-sm leading-6 text-sagegray">เมื่อเลือกแลกรางวัลที่หน้าร้าน ระบบจะส่งคำขอให้คุณยืนยันที่หน้านี้ก่อนเสมอ</p>
-            </section>
-          )}
-          <section className="rounded-[24px] border border-rose/15 bg-rose/5 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-rosedeep">Member benefits</p>
-            <p className="mt-2 font-display text-xl font-semibold text-ink">ทุกยอดชำระ คือสิทธิ์ของคุณ</p>
-            <p className="mt-2 text-sm leading-6 text-sagegray">ใช้เบอร์เดิมทุกครั้งที่หน้าร้าน เพื่อรับสิทธิ์และติดตามยอดสะสมได้ครบถ้วน</p>
-          </section>
-        </div>
+          </div>
+        )}
 
-        <section className="card overflow-hidden lg:col-span-2">
+        <section className={`card overflow-hidden ${hasPending ? 'lg:col-span-2' : ''}`}>
           <div className="flex items-center justify-between border-b border-mist px-5 py-5 sm:px-6">
             <div>
               <p className="section-title">ประวัติสิทธิ์ล่าสุด</p>
@@ -278,10 +266,6 @@ function Wrap({ children }) {
       <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-5 sm:gap-6">{children}</div>
     </main>
   )
-}
-
-function CheckIcon() {
-  return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 4.2 4.2L19 6.8" /></svg>
 }
 
 function formatHistoryDate(value) {
