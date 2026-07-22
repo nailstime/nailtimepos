@@ -4,6 +4,7 @@ import { corsHeaders, json } from "../_shared/http.ts"
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) })
   if (req.method !== "POST") return json(req, { error: "method_not_allowed" }, 405)
+
   try {
     const { order_id } = await req.json()
     const { admin, staff } = await requireStaff(req)
@@ -14,21 +15,28 @@ Deno.serve(async (req) => {
       .eq("branch_id", staff.branch_id)
       .eq("status", "paid")
       .single()
+
     if (error) throw error
-    if (!order?.member_id || !order.members?.line_user_id) return json(req, { skipped: "no_member_or_line" })
+    if (!order?.member_id || !order.members?.line_user_id) {
+      return json(req, { skipped: "no_member_or_line" })
+    }
 
     const { data: thresholdRow } = await admin
-      .from("settings").select("value")
-      .eq("branch_id", staff.branch_id).eq("key", "point_threshold_baht").single()
+      .from("settings")
+      .select("value")
+      .eq("branch_id", staff.branch_id)
+      .eq("key", "point_threshold_baht")
+      .single()
+
     const threshold = Number(thresholdRow?.value ?? 1500)
     const member = order.members
     const toNext = Math.max(0, threshold - Number(member.accumulated_baht))
     const text =
       `✅ ชำระเงินเรียบร้อย\n` +
-      `ยอดชำระ ${Number(order.total).toLocaleString("th-TH")} บาท\n` +
-      `สะสมอีก ${toNext.toLocaleString("th-TH")} บาท รับ 1 สิทธิ์\n` +
+      `ยอดชำระ ฿${Number(order.total).toLocaleString("th-TH")}\n` +
+      `สะสมอีก ฿${toNext.toLocaleString("th-TH")} รับ 1 สิทธิ์\n` +
       `สิทธิ์คงเหลือ: ${member.points_balance} สิทธิ์\n\n` +
-      `ขอบคุณที่ใช้บริการ Nail Time & Spa 💅`
+      "ขอบคุณที่ใช้บริการ Nail Time & Spa 💅"
 
     const response = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
@@ -38,6 +46,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({ to: member.line_user_id, messages: [{ type: "text", text }] }),
     })
+
     if (!response.ok) throw new Error(`LINE push failed (${response.status})`)
     return json(req, { ok: true })
   } catch (error) {
