@@ -9,7 +9,7 @@ export default function Catalog() {
   const [services, setServices] = useState([])
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [form, setForm] = useState({ kind: "service", category_id: "", name: "", price: "", commission_pct: "", counts: true })
+  const [form, setForm] = useState({ kind: "service", category_id: "", name: "", price: "", counts: true })
   const [error, setError] = useState("")
 
   async function load() {
@@ -28,11 +28,10 @@ export default function Catalog() {
       p_kind: form.kind,
       p_name: form.name,
       p_price: Number(form.price),
-      p_commission_pct: Number(form.commission_pct || 0),
       p_counts_toward_points: form.counts,
       p_category: form.category_id || null,
     })
-    setForm({ ...form, name: "", price: "", commission_pct: "" })
+    setForm({ ...form, name: "", price: "" })
     load()
   }
 
@@ -59,17 +58,14 @@ export default function Catalog() {
   async function updateCatalogItem(table, it, draft) {
     const name = draft.name.trim()
     const price = Number(draft.price)
-    const commissionPct = Number(draft.commission_pct)
     if (!name) return setError("กรุณาระบุชื่อรายการ")
     if (!Number.isFinite(price) || price < 0) return setError("ราคาต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป")
-    if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) return setError("ค่าคอมต้องอยู่ระหว่าง 0–100%")
     setError("")
     const { error: rpcError } = await supabase.rpc("catalog_update", {
       p_kind: table === "services" ? "service" : "product",
       p_item: it.id,
       p_name: name,
       p_price: price,
-      p_commission_pct: commissionPct,
       p_counts_toward_points: draft.counts_toward_points,
       p_category: draft.category_id || null,
     })
@@ -227,7 +223,6 @@ export default function Catalog() {
     const [draft, setDraft] = useState({
       name: it.name,
       price: String(it.price ?? 0),
-      commission_pct: String(it.commission_pct ?? 0),
       counts_toward_points: Boolean(it.counts_toward_points),
       category_id: it.category_id || '',
     })
@@ -236,7 +231,6 @@ export default function Catalog() {
       setDraft({
         name: it.name,
         price: String(it.price ?? 0),
-        commission_pct: String(it.commission_pct ?? 0),
         counts_toward_points: Boolean(it.counts_toward_points),
         category_id: it.category_id || '',
       })
@@ -252,10 +246,9 @@ export default function Catalog() {
     }
 
     return <>
-    <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_72px_72px_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_72px_auto_auto_auto]")}>
+    <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto]")}>
       <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
       <span className="text-right font-bold tabular-nums">{isVariablePrice ? `฿${baht(it.min_price)}–${baht(it.max_price)}` : `฿${baht(it.price)}`}</span>
-      <span className="text-right text-sagegray">คอม {it.commission_pct}%</span>
       {isProduct && (
         <div className="flex items-center justify-end gap-1"><button onClick={() => receiveStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-rosedeep hover:bg-rose/10">รับเข้า</button><button onClick={() => adjustStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-danger hover:bg-danger/5">ตัด</button></div>
       )}
@@ -269,11 +262,10 @@ export default function Catalog() {
       <button onClick={beginEdit} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-rosedeep hover:bg-rose/10" aria-label={`แก้ไข ${it.name}`}>แก้ไข</button>
     </div>
     {editing && <form onSubmit={saveEdit} className="border-b border-mist bg-porcelain/65 px-3 py-4 sm:px-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_140px_auto] xl:items-end">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_auto] xl:items-end">
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ชื่อรายการ</span><input className="input" required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">หมวดหมู่</span><select className="input" value={draft.category_id} onChange={(event) => setDraft({ ...draft, category_id: event.target.value })}><option value="">ยังไม่จัดหมวด</option>{categoriesFor(table === 'services' ? 'service' : 'product').map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{isVariablePrice ? "ช่วงราคา" : "ราคา (บาท)"}</span><input className="input" required disabled={isVariablePrice} inputMode="decimal" value={isVariablePrice ? `${baht(it.min_price)}–${baht(it.max_price)}` : draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} />{isVariablePrice && <span className="mt-1 block text-xs text-sagegray">POS จะขอราคาและรายละเอียดทุกครั้ง</span>}</label>
-        <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ค่าคอม (%)</span><input className="input" required inputMode="decimal" value={draft.commission_pct} onChange={(event) => setDraft({ ...draft, commission_pct: event.target.value })} /></label>
         <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.counts_toward_points} onChange={(event) => setDraft({ ...draft, counts_toward_points: event.target.checked })} />นับยอดสะสม NTime</label>
       </div>
       <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditing(false)} disabled={saving} className="btn-ghost">ยกเลิก</button><button disabled={saving} className="btn-rose">{saving ? "กำลังบันทึก…" : "บันทึกการแก้ไข"}</button></div>
@@ -285,12 +277,12 @@ export default function Catalog() {
     <div className="w-full">
       <SettingsBackLink />
       <div className="page-heading">
-        <div><p className="page-eyebrow">Catalog</p><h1 className="page-title">บริการและสินค้า</h1><p className="page-description">จัดการราคา ค่าคอมมิชชัน สต็อก และรายการที่ร่วมสะสม NTime</p></div>
+        <div><p className="page-eyebrow">Catalog</p><h1 className="page-title">บริการและสินค้า</h1><p className="page-description">จัดการราคา สต็อก และรายการที่ร่วมสะสม NTime</p></div>
       </div>
       {error && <p role="alert" className="mb-5 rounded-xl border border-danger/15 bg-danger/5 px-4 py-3 text-sm font-medium text-danger">{error}</p>}
       <section className="card mb-5 p-5 sm:p-6">
         <div className="mb-4"><p className="section-title">เพิ่มรายการใหม่</p><p className="section-note">รายการใหม่จะพร้อมใช้งานที่หน้า POS ทันที</p></div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[140px_160px_minmax(200px,1fr)_130px_130px_130px]">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[140px_160px_minmax(200px,1fr)_130px_130px]">
           <select className="input" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value, category_id: "" })}>
             <option value="service">บริการ</option>
             <option value="product">สินค้า</option>
@@ -303,8 +295,6 @@ export default function Catalog() {
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <input className="input" placeholder="ราคา" inputMode="decimal" value={form.price}
             onChange={(e) => setForm({ ...form, price: e.target.value })} />
-          <input className="input" placeholder="คอม %" inputMode="decimal" value={form.commission_pct}
-            onChange={(e) => setForm({ ...form, commission_pct: e.target.value })} />
           <button onClick={add} className="btn-rose">เพิ่มรายการ</button>
         </div>
         <label className="mt-4 flex min-h-11 items-center gap-3 rounded-xl bg-porcelain px-3 text-sm font-medium text-sagegray sm:w-fit">

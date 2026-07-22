@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../lib/supabase"
 import { baht, bangkokMonthStr } from "../../lib/format"
 import SettingsBackLink from "../../components/SettingsBackLink.jsx"
@@ -10,109 +10,172 @@ const nextMonth = () => {
   return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+const defaultTiers = [{ max_amount: "", pct: "3" }]
+
 export default function Commission() {
   const [month, setMonth] = useState(thisMonth())
   const [report, setReport] = useState(null)
   const [branchId, setBranchId] = useState(null)
-  const [nextMode, setNextMode] = useState("per_service")
-  const [tiers, setTiers] = useState([{ min_amount: "0", max_amount: "", pct: "3" }])
+  const [teamMinimum, setTeamMinimum] = useState("")
+  const [tiers, setTiers] = useState(defaultTiers)
   const [msg, setMsg] = useState("")
+  const [saving, setSaving] = useState(false)
 
-  const load = useCallback(async (m) => {
-    const { data: br } = await supabase.from("branches").select("id").limit(1).single()
-    setBranchId(br.id)
-    const { data } = await supabase.rpc("commission_report", { p_month: m })
-    setReport(data)
-    const { data: cs } = await supabase.from("commission_settings")
-      .select("mode").eq("branch_id", br.id).eq("effective_month", nextMonth()).maybeSingle()
-    if (cs) setNextMode(cs.mode)
+  const load = useCallback(async (selectedMonth) => {
+    setMsg("")
+    const { data: branch, error: branchError } = await supabase.from("branches").select("id").limit(1).single()
+    if (branchError) return setMsg(branchError.message)
+    setBranchId(branch.id)
+
+    const [{ data: reportData, error: reportError }, { data: config, error: configError }] = await Promise.all([
+      supabase.rpc("commission_report", { p_month: selectedMonth }),
+      supabase.from("commission_settings")
+        .select("team_minimum_amount")
+        .eq("branch_id", branch.id)
+        .eq("effective_month", nextMonth())
+        .maybeSingle(),
+    ])
+    if (reportError) return setMsg(reportError.message)
+    if (configError) return setMsg(configError.message)
+    setReport(reportData)
+
+    if (config) {
+      const { data: savedTiers, error: tiersError } = await supabase.from("commission_tiers")
+        .select("min_amount,max_amount,pct")
+        .eq("branch_id", branch.id)
+        .eq("effective_month", nextMonth())
+        .order("min_amount")
+      if (tiersError) return setMsg(tiersError.message)
+      setTeamMinimum(String(config.team_minimum_amount ?? 0))
+      const nextTiers = (savedTiers || []).map((tier) => ({
+        max_amount: tier.max_amount == null ? "" : String(tier.max_amount),
+        pct: String(tier.pct),
+      }))
+      setTiers(nextTiers.length > 0 ? nextTiers : defaultTiers)
+    }
   }, [])
+
   useEffect(() => { load(month) }, [month, load])
+
+  const tierStart = (index) => index === 0 ? teamMinimum : tiers[index - 1]?.max_amount
 
   async function saveNextMonth() {
     setMsg("")
-    const em = nextMonth()
-    const payload = tiers.filter((t) => t.pct !== "").map((t) => ({
-      min_amount: Number(t.min_amount || 0),
-      max_amount: t.max_amount === "" ? null : Number(t.max_amount),
-      pct: Number(t.pct),
-    }))
-    const { error } = await supabase.rpc("save_commission_configuration", {
-      p_effective_month: em,
-      p_mode: nextMode,
-      p_tiers: nextMode === "tiered_monthly" ? payload : [],
+    const minimum = Number(teamMinimum)
+    if (!Number.isFinite(minimum) || minimum < 0) return setMsg("ยอดทีมขั้นต่ำต้องเป็นจำนวนเงินตั้งแต่ ฿0 ขึ้นไป")
+
+    let previousMax = minimum
+    const payload = []
+    for (let index = 0; index < tiers.length; index += 1) {
+      const tier = tiers[index]
+      const pct = Number(tier.pct)
+      const isLast = index === tiers.length - 1
+      const maxAmount = tier.max_amount === "" ? null : Number(tier.max_amount)
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) return setMsg(`Tier ${index + 1} ต้องกำหนดอัตรา 0–100%`)
+      if (!isLast && (!Number.isFinite(maxAmount) || maxAmount <= previousMax)) {
+        return setMsg(`Tier ${index + 1} ต้องมียอดสิ้นสุดมากกว่า ฿${baht(previousMax)}`)
+      }
+      if (isLast && maxAmount !== null) return setMsg("Tier สุดท้ายต้องเว้นยอดสิ้นสุดไว้")
+      payload.push({ min_amount: previousMax, max_amount: maxAmount, pct })
+      if (maxAmount !== null) previousMax = maxAmount
+    }
+
+    setSaving(true)
+    const { error } = await supabase.rpc("save_team_commission_configuration", {
+      p_effective_month: nextMonth(),
+      p_team_minimum_amount: minimum,
+      p_tiers: payload,
     })
+    setSaving(false)
     if (error) return setMsg(error.message)
-    setMsg(`บันทึกแล้ว — มีผลเดือน ${em} (เดือนปัจจุบันไม่เปลี่ยน)`)
+    setMsg(`บันทึกกติกาคอมของเดือน ${nextMonth()} แล้ว — ไม่มีผลย้อนหลัง`)
+    load(month)
   }
 
   return (
     <div className="w-full">
       <SettingsBackLink />
-      <div className="page-heading"><div><p className="page-eyebrow">Commission</p><h1 className="page-title">ค่าคอมมิชชัน</h1><p className="page-description">ดูรายงานรายเดือนและตั้งกติกาสำหรับรอบเดือนถัดไป</p></div></div>
-      <div className="grid items-start gap-5 xl:grid-cols-2">
-      <section className="card overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-mist px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="section-title">รายงานค่าคอม</p><p className="section-note">เลือกเดือนที่ต้องการตรวจสอบ</p></div>
-          <input aria-label="เดือนรายงาน" type="month" className="input sm:w-auto" value={month} onChange={(e) => setMonth(e.target.value)} />
+      <div className="page-heading">
+        <div>
+          <p className="page-eyebrow">Commission</p>
+          <h1 className="page-title">ค่าคอมมิชชั่นทีม</h1>
+          <p className="page-description">คิดจากยอดสุทธิของทีมหลังหักส่วนลด แล้วแบ่งตามยอดงานสุทธิของพนักงานแต่ละคน</p>
         </div>
-        <div className="p-5">
-        {report && (
-          <>
-            <p className="mb-3 rounded-xl bg-porcelain px-3 py-2 text-sm text-sagegray">
-              โหมดเดือนนี้: {report.mode === "per_service" ? "คิดต่อบริการ (Mode A)" : "Tier ยอดรวมรายเดือน (Mode B)"}
-            </p>
-            {(report.rows || []).length === 0 && <div className="empty-state">ยังไม่มีข้อมูล</div>}
-            {(report.rows || []).map((r) => (
-              <div key={r.technician} className="data-row grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto]">
-                <span className="font-semibold">ช่าง{r.technician}</span>
-                <span className="text-sagegray text-sm">
-                  ยอด ฿{baht(r.total_sales)}{r.tier_pct != null ? ` · tier ${r.tier_pct}%` : ""}
-                </span>
-                <span className="text-right font-bold tabular-nums">฿{baht(r.commission)}</span>
-              </div>
-            ))}
-          </>
-        )}
-        </div>
-      </section>
+      </div>
 
-      <section className="card p-5 sm:p-6">
-        <p className="section-title">ตั้งค่าเดือนถัดไป</p>
-        <p className="section-note">รอบ {nextMonth()} · การเปลี่ยนแปลงไม่มีผลกับเดือนปัจจุบัน</p>
-        <div className="soft-panel mt-5 grid grid-cols-1 gap-2 p-1.5 sm:grid-cols-2">
-          <button onClick={() => setNextMode("per_service")}
-            className={(nextMode === "per_service" ? "btn-rose" : "btn-ghost") + " text-sm"}>
-            Mode A · ต่อบริการ
-          </button>
-          <button onClick={() => setNextMode("tiered_monthly")}
-            className={(nextMode === "tiered_monthly" ? "btn-rose" : "btn-ghost") + " text-sm"}>
-            Mode B · Tier ยอดรวม
-          </button>
-        </div>
-        {nextMode === "tiered_monthly" && (
-          <div className="mb-4 mt-4 space-y-3">
-            {tiers.map((t, i) => (
-              <div key={i} className="grid grid-cols-1 gap-2 rounded-xl border border-mist p-3 sm:grid-cols-[1fr_1fr_100px_auto]">
-                <input className="input" placeholder="ตั้งแต่ (บาท)" inputMode="decimal" value={t.min_amount}
-                  onChange={(e) => setTiers(tiers.map((x, j) => j === i ? { ...x, min_amount: e.target.value } : x))} />
-                <input className="input" placeholder="น้อยกว่า (ว่าง=ไม่จำกัด)" inputMode="decimal" value={t.max_amount}
-                  onChange={(e) => setTiers(tiers.map((x, j) => j === i ? { ...x, max_amount: e.target.value } : x))} />
-                <input className="input" placeholder="%" inputMode="decimal" value={t.pct}
-                  onChange={(e) => setTiers(tiers.map((x, j) => j === i ? { ...x, pct: e.target.value } : x))} />
-                <button className="btn-danger text-sm" onClick={() => setTiers(tiers.filter((_, j) => j !== i))}>ลบ</button>
-              </div>
-            ))}
-            <button className="btn-ghost text-sm"
-              onClick={() => setTiers([...tiers, { min_amount: "", max_amount: "", pct: "" }])}>
-              + เพิ่ม tier
-            </button>
+      {msg && <p role="status" className="mb-5 rounded-xl border border-mist bg-white px-4 py-3 text-sm font-medium text-ink">{msg}</p>}
+
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]">
+        <section className="card overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-mist px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="section-title">รายงานค่าคอม</p><p className="section-note">รายงานใช้ยอดสุทธิหลังหักส่วนลดและโปรโมชัน</p></div>
+            <input aria-label="เดือนรายงานค่าคอม" type="month" className="input sm:w-auto" value={month} onChange={(event) => setMonth(event.target.value)} />
           </div>
-        )}
-        <button onClick={saveNextMonth} className="btn-rose w-full">บันทึก (มีผลเดือนถัดไป)</button>
-        {msg && <p role="status" className="mt-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">{msg}</p>}
-      </section>
+          <div className="p-5">
+            {!report && <div className="empty-state">กำลังโหลดรายงาน…</div>}
+            {report && !report.configured && <div className="empty-state">ยังไม่มีกติกาคอมสำหรับเดือนนี้</div>}
+            {report?.configured && <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric label="ยอดสุทธิทีม" value={`฿${baht(report.team_net_sales)}`} />
+                <Metric label="ยอดเริ่มจ่ายคอม" value={`฿${baht(report.team_minimum_amount)}`} />
+                <Metric label="Tier ทีม" value={report.team_threshold_met ? `${report.tier_pct}%` : "ยังไม่ถึงขั้นต่ำ"} highlight={report.team_threshold_met} />
+              </div>
+              {!report.team_threshold_met && <p className="mt-4 rounded-xl bg-porcelain px-3 py-2 text-sm text-sagegray">ยอดทีมยังไม่ถึงขั้นต่ำ จึงยังไม่มีค่าคอมของเดือนนี้</p>}
+              <div className="mt-5 overflow-hidden rounded-2xl border border-mist">
+                <div className="hidden grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-3 border-b border-mist bg-porcelain/60 px-4 py-3 text-xs font-semibold text-sagegray sm:grid">
+                  <span>พนักงาน</span><span>ยอดสุทธิ</span><span>อัตราคอม</span><span className="text-right">ค่าคอม</span>
+                </div>
+                {(report.rows || []).map((row) => (
+                  <div key={row.staff_id} className="grid gap-x-3 gap-y-1 border-b border-mist px-4 py-3.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center">
+                    <span className="font-semibold">{row.technician}</span>
+                    <span className="text-sm text-sagegray">฿{baht(row.total_sales)}</span>
+                    <span className="text-sm text-sagegray">{row.tier_pct}%{Number(row.bonus_pct) > 0 && ` + ${row.bonus_pct}%`}</span>
+                    <span className="font-bold tabular-nums sm:text-right">฿{baht(row.commission)}</span>
+                  </div>
+                ))}
+                {(report.rows || []).length === 0 && <div className="empty-state m-3">ยังไม่มีรายการบริการหรือสินค้าที่ชำระแล้ว</div>}
+              </div>
+            </>}
+          </div>
+        </section>
+
+        <section className="card p-5 sm:p-6">
+          <p className="section-title">ตั้งค่าคอมเดือนถัดไป</p>
+          <p className="section-note">รอบ {nextMonth()} · ปรับได้เฉพาะเดือนถัดไปเพื่อให้รายงานย้อนหลังคงเดิม</p>
+
+          <label className="mt-5 block">
+            <span className="mb-1.5 block text-sm font-semibold text-ink">ยอดสุทธิทีมขั้นต่ำเพื่อเริ่มจ่ายคอม</span>
+            <input className="input" inputMode="decimal" placeholder="เช่น 30000" value={teamMinimum} onChange={(event) => setTeamMinimum(event.target.value)} />
+            <span className="mt-1.5 block text-xs text-sagegray">หากยอดทีมต่ำกว่านี้ พนักงานทุกคนจะไม่ได้รับค่าคอม</span>
+          </label>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-ink">Tier ยอดทีม</p><p className="mt-1 text-xs text-sagegray">ช่วงยอดจะต่อเนื่องให้อัตโนมัติจากยอดขั้นต่ำ</p></div><span className="badge-neutral">{tiers.length} Tier</span></div>
+            <div className="mt-3 space-y-3">
+              {tiers.map((tier, index) => {
+                const isLast = index === tiers.length - 1
+                return <div key={index} className="rounded-2xl border border-mist bg-porcelain/45 p-3">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_90px_auto] sm:items-end">
+                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ตั้งแต่</span><div className="input flex items-center bg-white/65 text-sagegray">฿{Number(tierStart(index) || 0).toLocaleString('th-TH')}</div></label>
+                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ถึง</span><input className="input" disabled={isLast} placeholder={isLast ? "ไม่จำกัด" : "เช่น 50000"} inputMode="decimal" value={tier.max_amount} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, max_amount: event.target.value } : item))} /></label>
+                    <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">คอม %</span><input className="input" placeholder="3" inputMode="decimal" value={tier.pct} onChange={(event) => setTiers(tiers.map((item, itemIndex) => itemIndex === index ? { ...item, pct: event.target.value } : item))} /></label>
+                    <button type="button" onClick={() => setTiers(tiers.filter((_, itemIndex) => itemIndex !== index))} disabled={tiers.length === 1} className="btn-danger text-sm">ลบ</button>
+                  </div>
+                  {isLast && <p className="mt-2 text-xs text-sagegray">Tier สุดท้ายไม่มีเพดานยอด</p>}
+                </div>
+              })}
+            </div>
+            <button type="button" className="btn-ghost mt-3 w-full" onClick={() => setTiers([...tiers.map((tier, index) => index === tiers.length - 1 ? { ...tier, max_amount: tier.max_amount } : tier), { max_amount: "", pct: "" }])}>+ เพิ่ม Tier</button>
+          </div>
+
+          <p className="mt-5 rounded-xl bg-porcelain px-3 py-3 text-sm leading-6 text-sagegray">โบนัสรายพนักงานตั้งค่าได้ในหน้า “พนักงานและสมาชิก” โดยจะบวกจากอัตรา Tier ของทีม เช่น Tier 3% + โบนัส 1% = 4%</p>
+          <button type="button" onClick={saveNextMonth} disabled={saving} className="btn-rose mt-5 w-full">{saving ? "กำลังบันทึก…" : "บันทึกกติกาเดือนถัดไป"}</button>
+        </section>
       </div>
     </div>
   )
+}
+
+function Metric({ label, value, highlight = false }) {
+  return <div className="rounded-xl bg-porcelain px-3 py-3"><p className="text-xs font-semibold text-sagegray">{label}</p><p className={(highlight ? "text-success" : "text-ink") + " mt-1 font-display text-xl font-semibold tabular-nums"}>{value}</p></div>
 }

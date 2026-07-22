@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabase"
-import { baht } from "../../lib/format"
+import { baht, bangkokMonthStr } from "../../lib/format"
 import { useAuth } from "../../context/AuthContext.jsx"
 import { useAppDialog } from "../../components/AppDialog.jsx"
 import SettingsBackLink from "../../components/SettingsBackLink.jsx"
+
+const nextMonth = () => {
+  const [year, month] = bangkokMonthStr().split('-').map(Number)
+  const next = new Date(Date.UTC(year, month, 1))
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`
+}
 
 export default function People() {
   const { staff } = useAuth()
@@ -94,6 +100,34 @@ export default function People() {
     if (!error) load()
   }
 
+  async function setCommissionBonus(s) {
+    const value = await openPrompt({
+      title: 'โบนัสค่าคอมเดือนถัดไป',
+      description: `${s.name} · สาขา ${s.branch_code}\nโบนัสจะบวกจาก Tier ของทีม และทำงานเมื่อยอดทีมถึงขั้นต่ำเท่านั้น`,
+      label: 'เพิ่มจาก Tier ทีม (%)',
+      initialValue: String(s.commission_bonus_pct ?? 0),
+      placeholder: 'เช่น 1',
+      inputMode: 'decimal',
+      required: true,
+      confirmLabel: 'บันทึกโบนัสค่าคอม',
+      helperText: 'กรอก 0 เพื่อล้างโบนัสพิเศษของพนักงานคนนี้',
+      validate: (input) => {
+        const bonus = Number(input)
+        if (!Number.isFinite(bonus) || bonus < 0 || bonus > 100) return 'กรุณากรอกตัวเลขระหว่าง 0–100'
+        return null
+      },
+    })
+    if (value === null) return
+    const bonus = Number(value)
+    const { error } = await supabase.rpc('save_staff_commission_bonus', {
+      p_staff: s.id,
+      p_effective_month: nextMonth(),
+      p_bonus_pct: bonus,
+    })
+    setMsg(error ? error.message : (bonus > 0 ? `ตั้งโบนัสค่าคอม +${bonus}% สำหรับ ${s.name} แล้ว` : `ล้างโบนัสค่าคอมของ ${s.name} แล้ว`))
+    if (!error) load()
+  }
+
   async function adjustPoints(m) {
     const changeInput = await openPrompt({
       title: 'ปรับ NTime สมาชิก',
@@ -152,11 +186,12 @@ export default function People() {
               <div key={s.id} className="border-b border-mist py-4 last:border-b-0">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className={!s.active ? "line-through text-sagegray" : ""}>
-                    <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{s.name}</p><span className="badge-neutral">{s.role === "owner" ? "Owner" : "ช่าง"}</span>{!s.active && <span className="badge-rose">ปิดใช้งาน</span>}</div>
+                    <div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{s.name}</p><span className="badge-neutral">{s.role === "owner" ? "Owner" : "ช่าง"}</span>{Number(s.commission_bonus_pct) > 0 && <span className="badge-rose">โบนัสคอม +{s.commission_bonus_pct}%</span>}{!s.active && <span className="badge-rose">ปิดใช้งาน</span>}</div>
                     <p className="mt-1.5 text-sm text-sagegray">สาขาประจำ <span className="font-semibold text-ink">{s.branch_code}</span> · {s.branch_name}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 lg:justify-end">
                   {canMove && <button type="button" onClick={() => { setEditingStaffId(isEditing ? null : s.id); setBranchSelection({ ...branchSelection, [s.id]: s.branch_id }) }} className="min-h-10 rounded-xl px-3 font-semibold text-rosedeep hover:bg-rose/10">{isEditing ? "ยกเลิกเปลี่ยนสาขา" : "เปลี่ยนสาขา"}</button>}
+                  <button type="button" onClick={() => setCommissionBonus(s)} disabled={!s.active || s.branch_id !== staff?.branch_id} className="min-h-10 rounded-xl px-3 font-semibold text-rosedeep hover:bg-rose/10">โบนัสคอม</button>
                   <button type="button" onClick={() => resetPin(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-ink">เปลี่ยน PIN</button>
                   {s.id !== staff?.id && <button type="button" onClick={() => toggleStaff(s)} className="min-h-10 rounded-xl px-3 font-semibold text-sagegray hover:bg-porcelain hover:text-danger">{s.active ? "ปิดใช้" : "เปิดใช้"}</button>}
                   </div>

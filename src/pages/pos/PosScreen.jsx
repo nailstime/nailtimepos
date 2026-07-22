@@ -270,7 +270,7 @@ export default function PosScreen() {
       return setCart((c) => [...c, {
         key: 'r' + it.id + Math.random(), item_type: 'redemption', ref: it.id,
         name: it.name, price: 0, points_cost: it.points_cost,
-        commission_pct: 0, counts: false,
+        counts: false,
         technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
       }])
     }
@@ -308,7 +308,7 @@ export default function PosScreen() {
         key: `variable-${it.id}-${Date.now()}`,
         item_type: type, ref: it.id, name: it.name, price: Number(priceInput),
         custom_price_reason: reason.trim(),
-        commission_pct: Number(it.commission_pct), counts: it.counts_toward_points,
+        counts: it.counts_toward_points,
         technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
       }])
       return
@@ -319,7 +319,7 @@ export default function PosScreen() {
       if (found) return c.map((x) => (x.key === key ? { ...x, qty: x.qty + 1 } : x))
       return [...c, {
         key, item_type: type, ref: it.id, name: it.name, price: Number(it.price),
-        commission_pct: Number(it.commission_pct), counts: it.counts_toward_points,
+        counts: it.counts_toward_points,
         technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
       }]
     })
