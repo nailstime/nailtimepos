@@ -395,7 +395,7 @@ export default function PosBookings() {
     const t = window.setTimeout(async () => {
       setMemberLoading(true)
       const { data } = await supabase.rpc('staff_search_customers', { p_query: memberSearch, p_limit: 5 })
-      setMemberResults(data || [])
+      setMemberResults(data?.items || [])
       setMemberLoading(false)
     }, 200)
     return () => { window.clearTimeout(t); setMemberLoading(false) }
