@@ -1,6 +1,16 @@
 /** Nail Time & Spa design tokens */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  safelist: [
+    'grid-cols-7',
+    'border-amber-200', 'border-amber-300', 'bg-amber-50', 'bg-amber-200',
+    'text-amber-600', 'text-amber-700', 'text-amber-800',
+    'hover:border-amber-300',
+    'border-green-200', 'border-green-300', 'bg-green-50', 'bg-green-200',
+    'text-green-600', 'text-green-700', 'text-green-800',
+    'hover:border-green-300',
+    'border-t-2',
+  ],
   theme: {
     extend: {
       colors: {

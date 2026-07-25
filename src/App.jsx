@@ -5,6 +5,7 @@ import { DialogProvider } from './components/AppDialog.jsx'
 
 const PinLogin = lazy(() => import('./pages/PinLogin.jsx'))
 const PosScreen = lazy(() => import('./pages/pos/PosScreen.jsx'))
+const PosBookings = lazy(() => import('./pages/pos/Bookings.jsx'))
 const StaffCustomers = lazy(() => import('./pages/pos/StaffCustomers.jsx'))
 const StaffCustomerDetail = lazy(() => import('./pages/pos/StaffCustomerDetail.jsx'))
 const CustomerDisplay = lazy(() => import('./pages/display/CustomerDisplay.jsx'))
@@ -45,6 +46,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<PinLogin />} />
           <Route path="/pos" element={<RequireStaff><PosScreen /></RequireStaff>} />
+          <Route path="/pos/bookings" element={<RequireStaff><PosBookings /></RequireStaff>} />
           <Route path="/pos/pending" element={<RequireStaff><PosScreen /></RequireStaff>} />
           <Route path="/pos/customers" element={<RequireStaff><StaffCustomers /></RequireStaff>} />
           <Route path="/pos/customers/:memberId" element={<RequireStaff><StaffCustomerDetail /></RequireStaff>} />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { baht } from '../../lib/format'
@@ -53,6 +53,8 @@ export default function PosScreen() {
   const location = useLocation()
   const navigate = useNavigate()
   const pendingView = location.pathname.endsWith('/pending')
+  const bookingId  = new URLSearchParams(location.search).get('booking')
+  const memberParam = new URLSearchParams(location.search).get('member')
   const [services, setServices] = useState([])
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -97,6 +99,13 @@ export default function PosScreen() {
   }, [])
 
   useEffect(() => { loadCounters() }, [loadCounters])
+
+  useEffect(() => {
+    if (!memberParam || member) return
+    supabase.rpc('pos_get_member', { p_id: memberParam }).then(({ data }) => {
+      if (data) setMember(data)
+    })
+  }, [memberParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (countersLoading || !counterCode || counters.some((counter) => counter.code === counterCode)) return
@@ -420,11 +429,14 @@ export default function PosScreen() {
         qty: c.qty,
         ...(c.custom_price_reason ? { unit_price: c.price, custom_price_reason: c.custom_price_reason } : {}),
       }))
-      const { data, error } = await supabase.rpc('create_order', {
+      const rpcName = bookingId ? 'create_order_from_booking' : 'create_order'
+      const params = {
         p_counter_code: counterCode,
         p_member: member?.id ?? null,
         p_items: items,
-      })
+        ...(bookingId ? { p_booking: bookingId } : {}),
+      }
+      const { data, error } = await supabase.rpc(rpcName, params)
       if (error) throw error
       const o = data.order
       for (const redemptionId of data.redemption_ids || []) {
@@ -551,6 +563,7 @@ export default function PosScreen() {
     if (error) return setErr(error.message)
     setCart([]); setMember(null); setPhone(''); setOrder(null)
     setResult(null); setDiscountReq(null); setPendingRedeems(0); setPendingApproval(false); setLinkCode(''); setStage('cart')
+    if (bookingId) navigate('/pos', { replace: true })
     loadPendingOrders()
   }
 
@@ -581,12 +594,13 @@ export default function PosScreen() {
     onPending: () => navigate('/pos/pending'),
     pendingActive: pendingView,
     onCustomers: () => navigate('/pos/customers'),
+    onBookings: () => navigate('/pos/bookings'),
     onAdmin: staff.role === 'owner' ? () => navigate('/admin') : null,
     onChangeCounter: changeCounter,
   }
 
   if (!counterCode || countersLoading) return (
-    <Shell {...shellProps} onPending={null} onCustomers={null} onChangeCounter={null}>
+    <Shell {...shellProps} onPending={null} onCustomers={null} onBookings={null} onChangeCounter={null}>
       <CounterPicker
         counters={counters}
         loading={countersLoading}
@@ -696,6 +710,10 @@ export default function PosScreen() {
           <p className="page-eyebrow">Counter {counterCode}</p>
           <h1 className="page-title">สร้างบิลใหม่</h1>
           <p className="page-description">เลือกบริการหรือสินค้า แล้วตรวจสอบรายการก่อนชำระเงิน</p>
+          {bookingId && <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose/15 bg-rose/5 px-3 py-2 text-sm font-medium text-rosedeep">
+            <CalendarIcon /> กำลังเปิดบิลจากการจอง <span className="font-mono text-xs">{bookingId.slice(0, 8)}</span>
+            <button type="button" onClick={() => navigate('/pos', { replace: true })} className="ml-1 underline">ยกเลิกการเชื่อมบิล</button>
+          </div>}
         </div>
         <span className="badge-neutral self-start sm:self-auto">{cart.length} รายการในบิล</span>
       </div>
@@ -974,40 +992,26 @@ function formatPendingTime(value) {
 function Center({ children }) {
   return <div className="card mx-auto mt-10 max-w-lg p-6 text-center sm:p-9">{children}</div>
 }
-function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendingActive = false, onCustomers, onAdmin, onChangeCounter, children }) {
+function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendingActive = false, onCustomers, onBookings, onAdmin, onChangeCounter, children }) {
   return (
     <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(169,79,97,0.07),_transparent_32%),#f7f4f2]">
       <header className="sticky top-0 z-20 border-b border-mist bg-white/90 backdrop-blur-xl">
         <div className="page-shell flex min-h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <BrandMark compact />
           <div className="flex items-center gap-2">
-            {counterCode && onChangeCounter && (
-              <button
-                onClick={onChangeCounter}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
-                aria-label={`เปลี่ยน Counter ปัจจุบัน ${counterCode}`}
-              >
-                <CounterIcon />
-                <span>{counterCode}</span>
-                <span className="hidden lg:inline">เปลี่ยน</span>
-              </button>
-            )}
-            {onAdmin && (
-              <button
-                onClick={onAdmin}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-rose/20 bg-rose/10 px-3 text-sm font-semibold text-rosedeep transition hover:bg-rose hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
-              >
-                <SettingsIcon />
-                <span className="hidden sm:inline">หลังร้าน</span>
-              </button>
-            )}
-            {onCustomers && <button
-              onClick={onCustomers}
+            {(onChangeCounter || onCustomers || onAdmin) && <QuickMenu
+              counterCode={counterCode}
+              onChangeCounter={onChangeCounter}
+              onCustomers={onCustomers}
+              onAdmin={onAdmin}
+            />}
+            {onBookings && <button
+              onClick={onBookings}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
-              aria-label="ดูข้อมูลลูกค้า"
+              aria-label="ตารางนัดหมาย"
             >
-              <CustomerIcon />
-              <span className="hidden sm:inline">ลูกค้า (ทีมบริการ)</span>
+              <CalendarIcon />
+              <span className="hidden md:inline">ตารางนัดหมาย</span>
             </button>}
             {onPending && <button
               onClick={onPending}
@@ -1036,6 +1040,75 @@ function ReceiptIcon() {
 
 function CustomerIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" /></svg>
+}
+
+function QuickMenu({ counterCode, onChangeCounter, onCustomers, onAdmin }) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    function closeOnOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false)
+    }
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
+
+  function choose(action) {
+    setOpen(false)
+    action?.()
+  }
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose ${open ? 'border-rose/25 bg-rose/10 text-rosedeep' : 'border-mist bg-white text-sagegray hover:border-blush hover:text-ink'}`}
+      >
+        <MenuIcon />
+        <span className="hidden sm:inline">เมนู</span>
+        <ChevronDownIcon className={open ? 'rotate-180' : ''} />
+      </button>
+      {open && (
+        <div role="menu" aria-label="เมนูการใช้งาน POS" className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-2xl border border-mist bg-white p-1.5 shadow-lift">
+          {onChangeCounter && <button type="button" role="menuitem" onClick={() => choose(onChangeCounter)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-ink transition hover:bg-porcelain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
+            <CounterIcon /><span className="flex-1">เปลี่ยน Counter</span><span className="text-xs font-medium text-sagegray">{counterCode}</span>
+          </button>}
+          {onCustomers && <button type="button" role="menuitem" onClick={() => choose(onCustomers)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-ink transition hover:bg-porcelain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
+            <CustomerIcon /><span>ข้อมูลลูกค้า</span>
+          </button>}
+          {onAdmin && <>
+            {(onChangeCounter || onCustomers) && <div className="mx-2 my-1 border-t border-mist" />}
+            <button type="button" role="menuitem" onClick={() => choose(onAdmin)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-rosedeep transition hover:bg-rose/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
+              <SettingsIcon /><span>เข้าหลังร้าน</span>
+            </button>
+          </>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MenuIcon() {
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>
+}
+
+function ChevronDownIcon({ className = '' }) {
+  return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-200 ${className}`} aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+}
+
+function CalendarIcon() {
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M7.5 3v4M16.5 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01" /></svg>
 }
 
 function CounterIcon() {
