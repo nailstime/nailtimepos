@@ -516,7 +516,7 @@ export default function PosBookings() {
             </div>
             <form onSubmit={createBooking} className="grid gap-4 p-5 sm:grid-cols-2">
               <label className="block text-sm font-semibold">วันที่นัดหมาย
-                <input className="input mt-1.5" type="date" value={date} onChange={e => selectCalendarDay(e.target.value)} required />
+                <input className="input mt-1.5" type="date" value={date} min={today} onChange={e => selectCalendarDay(e.target.value)} required />
               </label>
               <label className="block text-sm font-semibold">สถานะเริ่มต้น
                 <select className="input mt-1.5" value={status} onChange={e => setStatus(e.target.value)}>
