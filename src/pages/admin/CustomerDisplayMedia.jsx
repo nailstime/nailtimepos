@@ -28,6 +28,11 @@ function safeExtension(file) {
   return mediaTypeForFile(file) === 'video' ? 'mp4' : 'jpg'
 }
 
+function fileSize(size) {
+  if (!Number.isFinite(Number(size)) || Number(size) <= 0) return ''
+  return `${(Number(size) / 1024 / 1024).toFixed(1)} MB`
+}
+
 export default function CustomerDisplayMedia() {
   const { confirm } = useAppDialog()
   const inputRef = useRef(null)
@@ -91,6 +96,7 @@ export default function CustomerDisplayMedia() {
     setFile(null)
     if (inputRef.current) inputRef.current.value = ''
     setNotice('อัปเดตสื่อหน้าจอลูกค้าแล้ว จะแสดงเมื่อจออยู่สถานะรอคิดเงิน')
+    await load()
   }
 
   async function useDefaultArtwork() {
@@ -113,6 +119,41 @@ export default function CustomerDisplayMedia() {
     if (rpcError) return setError(rpcError.message)
     setCampaign(data)
     setNotice('กลับมาใช้ Artwork เริ่มต้นแล้ว')
+  }
+
+  async function useLibraryMedia(media) {
+    if (!media?.path || media.path === campaign?.path) return
+    setSaving(true)
+    setError('')
+    setNotice('')
+    const { data, error: rpcError } = await supabase.rpc('set_customer_display_media', {
+      p_media_type: media.type,
+      p_media_path: media.path,
+    })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    setCampaign({ ...data, library: campaign?.library || [] })
+    setNotice(`เปลี่ยนจอลูกค้าเป็น ${media.name} แล้ว`)
+  }
+
+  async function deleteLibraryMedia(media) {
+    if (!media?.path || media.path === campaign?.path) return
+    const accepted = await confirm({
+      title: 'ลบสื่อจากคลัง',
+      description: `ลบ “${media.name}” ออกจากคลังอย่างถาวรหรือไม่? ไฟล์นี้จะไม่สามารถกู้คืนได้`,
+      confirmLabel: 'ลบไฟล์',
+      cancelLabel: 'เก็บไว้',
+      tone: 'danger',
+    })
+    if (!accepted) return
+    setSaving(true)
+    setError('')
+    setNotice('')
+    const { error: rpcError } = await supabase.rpc('delete_customer_display_media', { p_media_path: media.path })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    setCampaign((current) => ({ ...current, library: (current?.library || []).filter((item) => item.path !== media.path) }))
+    setNotice(`ลบ ${media.name} ออกจากคลังแล้ว`)
   }
 
   const activeUrl = publicUrl(campaign?.path)
@@ -143,6 +184,18 @@ export default function CustomerDisplayMedia() {
           <button onClick={upload} disabled={!file || saving || loading} className="btn-rose mt-5 w-full disabled:cursor-not-allowed disabled:opacity-50">{saving ? 'กำลังอัปโหลด…' : 'อัปโหลดและใช้กับจอลูกค้า'}</button>
         </section>
       </div>
+
+      <section className="card mt-5 overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-mist px-5 py-4 sm:px-6"><div><p className="section-title">คลังสื่อ</p><p className="section-note">เลือกไฟล์เดิมเพื่อแสดงใหม่ได้ทันที และลบไฟล์ที่ไม่ใช้แล้วเพื่อลดพื้นที่</p></div><span className="badge-neutral">{campaign?.library?.length || 0} ไฟล์</span></div>
+        {!loading && !(campaign?.library?.length) ? <div className="px-5 py-10 text-center text-sm text-sagegray sm:px-6">ยังไม่มีไฟล์ในคลัง — อัปโหลดภาพหรือวิดีโอไฟล์แรกได้จากด้านบน</div> : <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-3">{(campaign?.library || []).map((media) => {
+          const active = media.path === campaign?.path
+          const url = publicUrl(media.path)
+          return <article key={media.path} className={(active ? 'border-rose ring-2 ring-rose/15' : 'border-mist') + ' overflow-hidden rounded-2xl border bg-white'}>
+            <div className="relative aspect-video bg-ink">{media.type === 'video' ? <video className="h-full w-full object-cover" src={url} muted preload="metadata" aria-label={`วิดีโอ ${media.name}`} /> : <img className="h-full w-full object-cover" src={url} alt={`Artwork ${media.name}`} />}{active && <span className="absolute left-3 top-3 badge-rose">กำลังแสดง</span>}<span className="absolute right-3 top-3 rounded-full bg-ink/65 px-2.5 py-1 text-xs font-semibold text-white">{media.type === 'video' ? 'วิดีโอ' : 'ภาพ'}</span></div>
+            <div className="p-3.5"><p className="truncate font-semibold text-ink" title={media.name}>{media.name}</p><p className="mt-1 text-xs text-sagegray">{fileSize(media.size) || 'ไม่ทราบขนาด'}{media.created_at ? ` · ${new Date(media.created_at).toLocaleDateString('th-TH')}` : ''}</p><div className="mt-3 flex gap-2"><button onClick={() => useLibraryMedia(media)} disabled={saving || active} className="btn-ghost min-h-9 flex-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">{active ? 'กำลังใช้งาน' : 'ใช้ไฟล์นี้'}</button><button onClick={() => deleteLibraryMedia(media)} disabled={saving || active} className="btn-danger min-h-9 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">ลบ</button></div></div>
+          </article>
+        })}</div>}
+      </section>
 
       <section className="card mt-5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6"><div><p className="section-title">Artwork เริ่มต้น</p><p className="section-note">ใช้พื้นหลังและข้อความของ Nail Time & Spa ในระบบ เหมาะเมื่อยังไม่มีสื่อให้แสดง</p></div><button onClick={useDefaultArtwork} disabled={saving || loading || campaign?.type === 'artwork'} className="btn-ghost mt-4 w-full sm:mt-0 sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">ใช้ Artwork เริ่มต้น</button></section>
     </div>
