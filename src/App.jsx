@@ -25,6 +25,7 @@ const CustomerDisplayMedia = lazy(() => import('./pages/admin/CustomerDisplayMed
 const SystemSettings = lazy(() => import('./pages/admin/SystemSettings.jsx'))
 const BranchCounters = lazy(() => import('./pages/admin/BranchCounters.jsx'))
 const LiffMember = lazy(() => import('./pages/liff/LiffMember.jsx'))
+const LiffBooking = lazy(() => import('./pages/liff/LiffBooking.jsx'))
 
 function RequireStaff({ children, ownerOnly = false }) {
   const { staff, loading } = useAuth()
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/pos/customers/:memberId" element={<RequireStaff><StaffCustomerDetail /></RequireStaff>} />
           <Route path="/display" element={<CustomerDisplay />} />
           <Route path="/liff" element={<LiffMember />} />
+          <Route path="/liff/booking" element={<LiffBooking />} />
           <Route path="/admin" element={<RequireStaff ownerOnly><AdminLayout /></RequireStaff>}>
             <Route index element={<Dashboard />} />
             <Route path="reconcile" element={<Reconcile />} />
