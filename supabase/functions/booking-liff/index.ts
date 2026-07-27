@@ -126,6 +126,8 @@ Deno.serve(async (req) => {
     if (body.action === "book") {
       const slotId = String(body.slot_id || "")
       const date = String(body.date || "")
+      const phone = String(body.guest_phone || "").replace(/\D/g, "")
+      if (!/^\d{10}$/.test(phone)) return json(req, { error: "invalid_phone" }, 400)
       const result = await getBookableSlots(admin, date, body.service_ids ?? body.service_id)
       const selectedSlot = result.slots.find((slot) => slot.id === slotId)
       if (!selectedSlot) return json(req, { error: "selected_slot_unavailable" }, 409)
@@ -137,7 +139,7 @@ Deno.serve(async (req) => {
         start_time: selectedSlot.start_time,
         end_time: selectedSlot.end_time,
         guest_name: String(body.guest_name || profile.name || "").trim() || null,
-        guest_phone: String(body.guest_phone || "").replace(/\D/g, "") || null,
+        guest_phone: phone,
         guest_line_uid: profile.sub,
         note: String(body.note || "").trim() || null,
         status: "pending",

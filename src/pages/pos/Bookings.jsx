@@ -230,7 +230,7 @@ function WeekView({ weekDates, weekBookings, today, selectedId, onSelect, onCell
 }
 
 // ─── BookingPanel ─────────────────────────────────────────────────────────────
-function BookingPanel({ booking, busyId, onChangeStatus, onOpenBill, onClose }) {
+function BookingPanel({ booking, busyId, onChangeStatus, onOpenBill, onEdit, onClose }) {
   if (!booking) return null
   const isPending   = booking.status === 'pending'
   const isConfirmed = booking.status === 'confirmed'
@@ -248,7 +248,16 @@ function BookingPanel({ booking, busyId, onChangeStatus, onOpenBill, onClose }) 
           </div>
           <p className="mt-1 text-base font-semibold text-ink">{booking.guest_name || 'ลูกค้าทั่วไป'}</p>
           <p className="text-sm text-sagegray">{booking.service?.name}</p>
-          {booking.guest_phone && <p className="text-sm text-sagegray">{booking.guest_phone}</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-sagegray">เบอร์โทร</span>
+            {booking.guest_phone ? (
+              <a href={`tel:${String(booking.guest_phone).replace(/\D/g, '')}`} className="btn-ghost min-h-10 gap-2 text-sm font-bold text-ink">
+                โทร {booking.guest_phone}
+              </a>
+            ) : (
+              <span className="rounded-lg border border-dashed border-mist px-3 py-2 text-sm text-sagegray">ยังไม่มีเบอร์โทร</span>
+            )}
+          </div>
           {booking.note && <p className="mt-1.5 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs text-sagegray">{booking.note}</p>}
           {booking.order_id && <p className="mt-1.5 text-xs font-medium text-sagegray">บิล {booking.order_no} · {booking.order_status}</p>}
         </div>
@@ -260,11 +269,129 @@ function BookingPanel({ booking, busyId, onChangeStatus, onOpenBill, onClose }) 
             <button type="button" onClick={() => onChangeStatus(booking, 'confirmed')} disabled={busyId === booking.id} className="btn-ghost text-sm">ยืนยัน</button>
           )}
           {!booking.order_id && (
+            <button type="button" onClick={() => onEdit(booking)} disabled={busyId === booking.id} className="btn-ghost text-sm">แก้ไขคิว</button>
+          )}
+          {!booking.order_id && (
             <button type="button" onClick={() => onOpenBill(booking.id, booking.member_id)} className="btn-rose text-sm">เปิดบิล</button>
           )}
           <button type="button" onClick={() => onChangeStatus(booking, 'cancelled')} disabled={busyId === booking.id} className="btn-danger text-sm">ยกเลิก</button>
         </div>
       )}
+    </div>
+  )
+}
+
+function EditBookingDialog({ booking, services, today, onClose, onSaved }) {
+  const [serviceIds, setServiceIds] = useState(() => booking.service_ids || [booking.service?.id])
+  const [slotDate, setSlotDate] = useState(booking.slot_date)
+  const [slotId, setSlotId] = useState(booking.slot_id || '')
+  const [guestName, setGuestName] = useState(booking.guest_name || '')
+  const [guestPhone, setGuestPhone] = useState(booking.guest_phone || '')
+  const [note, setNote] = useState(booking.note || '')
+  const [slots, setSlots] = useState([])
+  const [slotLoading, setSlotLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const totalDuration = useMemo(() => services
+    .filter(service => serviceIds.includes(service.id))
+    .reduce((sum, service) => sum + (service.duration || 0), 0), [services, serviceIds])
+  const originalDuration = booking.service?.duration || 0
+  const canKeepOriginalTime = slotDate === booking.slot_date && totalDuration === originalDuration
+  const currentSlot = canKeepOriginalTime && booking.slot_id
+    ? { id: booking.slot_id, start_time: booking.start_time, end_time: booking.end_time, current: true }
+    : null
+  const availableSlots = currentSlot && !slots.some(slot => slot.id === currentSlot.id)
+    ? [currentSlot, ...slots]
+    : slots
+
+  useEffect(() => {
+    if (!serviceIds.length || !totalDuration) { setSlots([]); return }
+    let alive = true
+    setSlotLoading(true)
+    supabase.rpc('pos_booking_slots_for_duration', { p_date: slotDate, p_minutes: totalDuration })
+      .then(({ data, error: rpcError }) => {
+        if (!alive) return
+        setSlots(data || [])
+        if (rpcError) setError(rpcError.message)
+      })
+      .finally(() => { if (alive) setSlotLoading(false) })
+    return () => { alive = false }
+  }, [slotDate, serviceIds, totalDuration])
+
+  useEffect(() => {
+    if (!canKeepOriginalTime) setSlotId('')
+  }, [canKeepOriginalTime])
+
+  async function save(event) {
+    event.preventDefault()
+    if (!serviceIds.length || !slotId || !guestName.trim() || saving) return
+    setSaving(true); setError('')
+    const { error: rpcError } = await supabase.rpc('pos_update_booking', {
+      p_booking: booking.id,
+      p_services: serviceIds,
+      p_slot: slotId,
+      p_guest_name: guestName.trim(),
+      p_guest_phone: guestPhone,
+      p_note: note,
+    })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 p-0 sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="edit-booking-title">
+      <form onSubmit={save} className="max-h-[94dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-mist bg-white px-5 py-4 sm:px-6">
+          <div>
+            <p className="eyebrow">BOOKING</p>
+            <h2 id="edit-booking-title" className="mt-1 text-xl font-bold text-ink">แก้ไขคิว {booking.booking_no}</h2>
+            <p className="mt-1 text-sm text-sagegray">เลือกบริการและเวลาใหม่ ระบบจะตรวจคิวชนก่อนบันทึก</p>
+          </div>
+          <button type="button" onClick={onClose} className="btn-ghost min-h-10 min-w-10 px-3" aria-label="ปิด">×</button>
+        </div>
+        <div className="space-y-5 px-5 py-5 sm:px-6">
+          {error && <p role="alert" className="rounded-xl border border-danger/20 bg-danger/5 px-3 py-2 text-sm font-medium text-danger">{error}</p>}
+          <div>
+            <p className="text-sm font-semibold text-ink">บริการ <span className="font-normal text-sagegray">เลือกได้หลายรายการ</span></p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {services.map(service => {
+                const selected = serviceIds.includes(service.id)
+                return <button key={service.id} type="button" onClick={() => setServiceIds(ids => selected ? ids.filter(id => id !== service.id) : [...ids, service.id])}
+                  className={`min-h-10 rounded-xl border px-3 text-sm font-semibold transition ${selected ? 'border-rose bg-rose text-white' : 'border-mist bg-white text-ink hover:border-rose/40'}`}>
+                  {service.name}<span className={`ml-1 text-xs ${selected ? 'opacity-75' : 'text-sagegray'}`}>{service.duration} นาที</span>
+                </button>
+              })}
+            </div>
+            <p className="mt-2 text-xs text-sagegray">รวม {totalDuration || 0} นาที</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-semibold text-ink">วันนัด
+              <input className="input mt-1.5" type="date" value={slotDate} min={today} onChange={event => setSlotDate(event.target.value)} required />
+            </label>
+            <label className="block text-sm font-semibold text-ink">ช่วงเวลา
+              <select className="input mt-1.5" value={slotId} onChange={event => setSlotId(event.target.value)} required disabled={!serviceIds.length || slotLoading}>
+                <option value="">{slotLoading ? 'กำลังหาเวลาว่าง…' : 'เลือกช่วงเวลา'}</option>
+                {availableSlots.map(slot => <option key={slot.id} value={slot.id}>{displayTime(slot.start_time)}–{displayTime(slot.end_time)} น. {slot.current ? '(เวลาเดิม)' : ''}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-ink">ชื่อลูกค้า
+              <input className="input mt-1.5" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={160} required />
+            </label>
+            <label className="block text-sm font-semibold text-ink">เบอร์โทรศัพท์
+              <input className="input mt-1.5" type="tel" inputMode="numeric" value={guestPhone} onChange={event => setGuestPhone(event.target.value.replace(/[^0-9-]/g, '').slice(0, 15))} placeholder="0xx-xxx-xxxx" />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-ink">หมายเหตุ <span className="font-normal text-sagegray">(ไม่บังคับ)</span>
+            <textarea className="input mt-1.5 min-h-24 resize-y" value={note} onChange={event => setNote(event.target.value)} maxLength={500} />
+          </label>
+        </div>
+        <div className="sticky bottom-0 flex gap-3 border-t border-mist bg-white px-5 py-4 sm:px-6">
+          <button type="button" onClick={onClose} className="btn-ghost flex-1">ยกเลิก</button>
+          <button disabled={saving || !serviceIds.length || !slotId || !guestName.trim()} className="btn-rose flex-1 disabled:opacity-40">{saving ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}</button>
+        </div>
+      </form>
     </div>
   )
 }
@@ -311,6 +438,7 @@ export default function PosBookings() {
   const [saving,    setSaving]    = useState(false)
   const [busyId,    setBusyId]    = useState('')
   const [error,     setError]     = useState('')
+  const [editingBooking, setEditingBooking] = useState(null)
 
   const createSectionRef = useRef(null)
   const panelRef         = useRef(null)
@@ -460,6 +588,12 @@ export default function PosBookings() {
     resetCreateForm()
     setShowCreate(false)
     if (viewMode === 'week') loadWeekBookings()
+    else await Promise.all([loadBookings(), loadCalendar()])
+  }
+
+  async function refreshAfterBookingChange() {
+    setSelectedId(null)
+    if (viewMode === 'week') await loadWeekBookings()
     else await Promise.all([loadBookings(), loadCalendar()])
   }
 
@@ -636,6 +770,7 @@ export default function PosBookings() {
                   busyId={busyId}
                   onChangeStatus={changeStatus}
                   onOpenBill={(id, mid) => navigate(`/pos?booking=${id}${mid ? `&member=${mid}` : ''}`)}
+                  onEdit={setEditingBooking}
                   onClose={() => setSelectedId(null)}
                 />
               </div>
@@ -729,18 +864,22 @@ export default function PosBookings() {
                   busyId={busyId}
                   onChangeStatus={changeStatus}
                   onOpenBill={(id, mid) => navigate(`/pos?booking=${id}${mid ? `&member=${mid}` : ''}`)}
+                  onEdit={setEditingBooking}
                 />
               )}
             </section>
           </div>
         )}
       </main>
+      {editingBooking && <EditBookingDialog booking={editingBooking} services={services} today={today}
+        onClose={() => setEditingBooking(null)}
+        onSaved={async () => { setEditingBooking(null); await refreshAfterBookingChange() }} />}
     </div>
   )
 }
 
 // ─── DayTimeline (used in month view) ────────────────────────────────────────
-function DayTimeline({ bookings, busyId, onChangeStatus, onOpenBill }) {
+function DayTimeline({ bookings, busyId, onChangeStatus, onOpenBill, onEdit }) {
   const [expandedId, setExpandedId] = useState(null)
   const totalHeight = ((CLOSE_MIN - OPEN_MIN) / 60) * 80
   const hours = Array.from({ length: 11 }, (_, i) => 10 + i)
@@ -817,12 +956,22 @@ function DayTimeline({ bookings, busyId, onChangeStatus, onOpenBill }) {
                   ${isPending ? 'border-amber-200 bg-white' : isConfirmed ? 'border-green-200 bg-white' : 'border-mist bg-white'}`}>
                   <p className="font-semibold text-ink">{booking.guest_name || 'ลูกค้าทั่วไป'}</p>
                   <p className="text-sm text-sagegray">{booking.service?.name}</p>
-                  {booking.guest_phone && <p className="text-sm text-sagegray">{booking.guest_phone}</p>}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-sagegray">เบอร์โทร</span>
+                    {booking.guest_phone ? (
+                      <a href={`tel:${String(booking.guest_phone).replace(/\D/g, '')}`} className="btn-ghost min-h-10 gap-2 text-sm font-bold text-ink">
+                        โทร {booking.guest_phone}
+                      </a>
+                    ) : (
+                      <span className="rounded-lg border border-dashed border-mist px-3 py-2 text-sm text-sagegray">ยังไม่มีเบอร์โทร</span>
+                    )}
+                  </div>
                   {booking.note && <p className="mt-1 rounded-lg bg-porcelain px-2.5 py-1.5 text-xs text-sagegray">{booking.note}</p>}
                   {booking.order_id && <p className="mt-2 text-xs font-medium text-sagegray">บิล {booking.order_no} · {booking.order_status}</p>}
                   {isActive && (
                     <div className="mt-2.5 flex flex-wrap gap-2">
                       {isPending && <button type="button" onClick={() => { onChangeStatus(booking, 'confirmed'); setExpandedId(null) }} disabled={busyId === booking.id} className="btn-ghost text-sm">ยืนยัน</button>}
+                      {!booking.order_id && <button type="button" onClick={() => { onEdit(booking); setExpandedId(null) }} disabled={busyId === booking.id} className="btn-ghost text-sm">แก้ไขคิว</button>}
                       {!booking.order_id && <button type="button" onClick={() => onOpenBill(booking.id)} className="btn-rose text-sm">เปิดบิล</button>}
                       <button type="button" onClick={() => { onChangeStatus(booking, 'cancelled'); setExpandedId(null) }} disabled={busyId === booking.id} className="btn-danger text-sm">ยกเลิก</button>
                     </div>
