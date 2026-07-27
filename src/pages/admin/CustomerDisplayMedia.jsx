@@ -149,9 +149,9 @@ export default function CustomerDisplayMedia() {
     setSaving(true)
     setError('')
     setNotice('')
-    const { error: rpcError } = await supabase.rpc('delete_customer_display_media', { p_media_path: media.path })
+    const { error: removeError } = await supabase.storage.from(BUCKET).remove([media.path])
     setSaving(false)
-    if (rpcError) return setError(rpcError.message)
+    if (removeError) return setError(removeError.message)
     setCampaign((current) => ({ ...current, library: (current?.library || []).filter((item) => item.path !== media.path) }))
     setNotice(`ลบ ${media.name} ออกจากคลังแล้ว`)
   }
