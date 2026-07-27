@@ -153,10 +153,24 @@ export default function LiffMember() {
   const toNext = Math.max(0, Number(me.threshold) - Number(m.accumulated_baht))
   const pct = Math.min(100, (Number(m.accumulated_baht) / Number(me.threshold)) * 100)
   const hasPending = me.pending.length > 0
+  const bookingLiffId = import.meta.env.VITE_BOOKING_LIFF_ID
+  const bookingUrl = bookingLiffId ? `https://liff.line.me/${bookingLiffId}` : ''
   const srcLabel = {
     order_paid: 'สะสมจากบิล', order_void: 'คืนแต้มจากบิลยกเลิก',
     redemption: 'ใช้ NTime', redemption_refund: 'คืน NTime จากบิลยกเลิก',
     manual_adjust: 'ปรับโดยร้าน',
+  }
+
+  function openBooking() {
+    if (!bookingUrl) {
+      setErr('ยังไม่ได้ตั้งค่า Booking LIFF')
+      return
+    }
+    if (liff.isInClient()) {
+      liff.openWindow({ url: bookingUrl, external: false })
+      return
+    }
+    window.location.assign(bookingUrl)
   }
 
   return (
@@ -198,6 +212,10 @@ export default function LiffMember() {
                 <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: pct + '%' }} />
               </div>
             </div>
+
+            <button type="button" onClick={openBooking} className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-white/25 bg-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+              จองคิวออนไลน์
+            </button>
           </div>
         </section>
 
