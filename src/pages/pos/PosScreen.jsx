@@ -84,6 +84,7 @@ export default function PosScreen() {
   const [counters, setCounters] = useState([])
   const [countersLoading, setCountersLoading] = useState(true)
   const [counterError, setCounterError] = useState('')
+  const [catalogError, setCatalogError] = useState('')
 
   const loadCounters = useCallback(async () => {
     setCountersLoading(true)
@@ -206,20 +207,27 @@ export default function PosScreen() {
     setRestoringCounter(false)
   }, [applyCounterState, counterCode, loadPendingOrders])
 
-  useEffect(() => {
-    ;(async () => {
-      const [{ data: sv }, { data: pd }, { data: ct }, { data: rw }, { data: st }] = await Promise.all([
-        supabase.from('services').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('products').select('*').eq('active', true),
-        supabase.from('catalog_categories').select('*').order('sort_order').order('name'),
-        supabase.from('rewards').select('*').eq('active', true).order('points_cost'),
-        supabase.from('staff').select('id,name').eq('role', 'technician').eq('active', true),
-      ])
-      setServices(sv || []); setProducts(pd || []); setRewards(rw || [])
-      setCategories(ct || [])
-      setTechs(st || [])
-    })()
+  const loadCatalog = useCallback(async () => {
+    const results = await Promise.all([
+      supabase.from('services').select('*').eq('is_active', true).order('sort_order'),
+      supabase.from('products').select('*').eq('active', true),
+      supabase.from('catalog_categories').select('*').order('sort_order').order('name'),
+      supabase.from('rewards').select('*').eq('active', true).order('points_cost'),
+      supabase.from('staff').select('id,name').eq('role', 'technician').eq('active', true),
+    ])
+    const failed = results.find((result) => result.error)
+    if (failed) {
+      setCatalogError(failed.error.message)
+      return
+    }
+    const [{ data: sv }, { data: pd }, { data: ct }, { data: rw }, { data: st }] = results
+    setServices(sv || []); setProducts(pd || []); setRewards(rw || [])
+    setCategories(ct || [])
+    setTechs(st || [])
+    setCatalogError('')
   }, [])
+
+  useEffect(() => { loadCatalog() }, [loadCatalog])
 
   useEffect(() => {
     if (counterCode) restoreCounter()
@@ -234,19 +242,12 @@ export default function PosScreen() {
     loadPendingOrders()
   }, [order?.id, applyCounterState, counterCode, loadPendingOrders])
 
+  // ใช้ polling อย่างเดียว — ตารางเหล่านี้ RLS ปิดหมด postgres_changes ส่ง event ไม่ถึง client อยู่แล้ว
   useEffect(() => {
     if (!order || stage !== 'paying') return
     refreshOrder()
     const timer = window.setInterval(refreshOrder, 1500)
-    const ch = supabase.channel('pos-order-' + order.id)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'redemptions' }, refreshOrder)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'approval_requests' }, refreshOrder)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, refreshOrder)
-      .subscribe()
-    return () => {
-      window.clearInterval(timer)
-      supabase.removeChannel(ch)
-    }
+    return () => window.clearInterval(timer)
   }, [order?.id, stage, refreshOrder])
 
   const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart])
@@ -280,7 +281,7 @@ export default function PosScreen() {
         key: 'r' + it.id + Math.random(), item_type: 'redemption', ref: it.id,
         name: it.name, price: 0, points_cost: it.points_cost,
         counts: false,
-        technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
+        technician_id: staff.role === 'technician' ? staff.id : null, qty: 1,
       }])
     }
     if (type === 'service' && it.price_mode === 'variable') {
@@ -318,7 +319,7 @@ export default function PosScreen() {
         item_type: type, ref: it.id, name: it.name, price: Number(priceInput),
         custom_price_reason: reason.trim(),
         counts: it.counts_toward_points,
-        technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
+        technician_id: staff.role === 'technician' ? staff.id : null, qty: 1,
       }])
       return
     }
@@ -329,12 +330,12 @@ export default function PosScreen() {
       return [...c, {
         key, item_type: type, ref: it.id, name: it.name, price: Number(it.price),
         counts: it.counts_toward_points,
-        technician_id: staff.role === 'technician' ? staff.id : (techs[0]?.id ?? null), qty: 1,
+        technician_id: staff.role === 'technician' ? staff.id : null, qty: 1,
       }]
     })
   }
   const removeItem = (key) => setCart((c) => c.filter((x) => x.key !== key))
-  const setTech = (key, id) => setCart((c) => c.map((x) => (x.key === key ? { ...x, technician_id: id } : x)))
+  const setTech = (key, id) => setCart((c) => c.map((x) => (x.key === key ? { ...x, technician_id: id || null } : x)))
 
   async function clearCart() {
     if (!cart.length) return
@@ -410,6 +411,10 @@ export default function PosScreen() {
 
   async function checkout() {
     if (!cart.length || busy) return
+    if (cart.some((c) => !c.technician_id)) {
+      setErr('เลือกช่างให้ครบทุกรายการก่อนเปิดบิล — เพื่อให้ค่าคอมมิชชั่นเข้าถูกคน')
+      return
+    }
     const zeroBill = total === 0
     const confirmed = await openConfirm({
       title: zeroBill ? 'ยืนยันเปิดบิลใช้ NTime' : 'ยืนยันเปิดบิล',
@@ -719,6 +724,12 @@ export default function PosScreen() {
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_420px]">
         <div>
+          {catalogError && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+              <span>โหลดรายการบริการ/สินค้าไม่สำเร็จ: {catalogError}</span>
+              <button type="button" onClick={loadCatalog} className="btn-ghost shrink-0 text-danger">ลองอีกครั้ง</button>
+            </div>
+          )}
           <div className="soft-panel hide-scrollbar mb-4 flex gap-1.5 overflow-x-auto p-1.5">
             <button onClick={() => selectCatalogTab('service')} className={(tab === 'service' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>บริการ</button>
             <button onClick={() => selectCatalogTab('product')} className={(tab === 'product' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>สินค้า</button>
@@ -825,8 +836,9 @@ export default function PosScreen() {
               </div>
               {c.custom_price_reason && <p className="mt-1 text-xs text-sagegray">{c.custom_price_reason}</p>}
               <div className="flex justify-between items-center mt-1">
-                <select className="min-h-9 rounded-lg bg-porcelain px-2 text-sm text-sagegray outline-none focus:ring-2 focus:ring-rose/30"
+                <select className={`min-h-9 rounded-lg px-2 text-sm outline-none focus:ring-2 focus:ring-rose/30 ${c.technician_id ? 'bg-porcelain text-sagegray' : 'bg-danger/5 text-danger'}`}
                   value={c.technician_id ?? ''} onChange={(e) => setTech(c.key, e.target.value)}>
+                  <option value="">เลือกช่าง…</option>
                   {techs.map((t) => <option key={t.id} value={t.id}>ช่าง{t.name}</option>)}
                 </select>
                 <button onClick={() => removeItem(c.key)} className="min-h-9 rounded-lg px-2 text-sm font-medium text-danger hover:bg-danger/5">ลบ</button>
@@ -944,7 +956,7 @@ function PendingOrdersPage({ orders, activeOrder, counterCode, busyId, error, on
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-display text-xl font-semibold">บิล {pendingOrder.order_no}</h2>
-                      {isCurrent && <span className="badge-rose">กำลังแสดงที่ C1</span>}
+                      {isCurrent && <span className="badge-rose">กำลังแสดงที่ {counterCode}</span>}
                       {!isCurrent && pendingOrder.counter_code && <span className="badge-neutral">Counter {pendingOrder.counter_code}</span>}
                     </div>
                     <p className="mt-1 text-xs text-sagegray">เปิดโดย {pendingOrder.opened_by} · {formatPendingTime(pendingOrder.created_at)}</p>

@@ -1,4 +1,9 @@
-export const baht = (n) => Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 0 })
+export const baht = (n) => {
+  const value = Number(n || 0)
+  return value.toLocaleString("th-TH", Number.isInteger(value)
+    ? { maximumFractionDigits: 0 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 export const todayStr = () => new Date().toLocaleDateString("th-TH", { dateStyle: "long", timeZone: "Asia/Bangkok" })
 export const bangkokTime = (value) => value
   ? new Date(value).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })

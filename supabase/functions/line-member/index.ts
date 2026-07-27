@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.7"
 import { corsHeaders, json } from "../_shared/http.ts"
+import { isRateLimited } from "../_shared/rate-limit.ts"
 
 async function verifyLineIdToken(idToken: string) {
   const channelId = Deno.env.get("LINE_LOGIN_CHANNEL_ID")
@@ -21,6 +22,7 @@ async function verifyLineIdToken(idToken: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) })
   if (req.method !== "POST") return json(req, { error: "method_not_allowed" }, 405)
+  if (isRateLimited(req)) return json(req, { error: "too_many_requests" }, 429)
   try {
     const body = await req.json()
     const profile = await verifyLineIdToken(String(body.id_token || ""))

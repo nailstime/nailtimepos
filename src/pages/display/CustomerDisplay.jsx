@@ -63,7 +63,10 @@ export default function CustomerDisplay() {
       p_counter_code: counterCode,
       p_display_token: displayToken,
     })
-    if (error || !data) {
+    // error = เน็ต/เซิร์ฟเวอร์มีปัญหาชั่วคราว — คงสถานะเดิมไว้แล้วรอรอบถัดไป
+    // RPC คืน null data เท่านั้นที่แปลว่า token ถูกยกเลิกจริง
+    if (error) return
+    if (!data) {
       setAuthorized(false)
       return
     }
@@ -75,12 +78,13 @@ export default function CustomerDisplay() {
     setCampaign(data.campaign || null)
   }, [counterCode, displayToken])
 
+  // มีบิลค้าง = poll ถี่เพื่อให้ QR/สถานะจ่ายเงินสดใหม่ ตอน idle ผ่อนเหลือ 5 วินาทีลดโหลดทั้งวัน
   useEffect(() => {
     if (!displayToken) return
     load()
-    const timer = setInterval(load, 1500)
+    const timer = setInterval(load, order ? 1500 : 5000)
     return () => clearInterval(timer)
-  }, [displayToken, load])
+  }, [displayToken, load, Boolean(order)])
 
   async function pairDisplay(event) {
     event.preventDefault()

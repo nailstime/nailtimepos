@@ -69,11 +69,10 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    // Best-effort: เคลียร์ session ฝั่ง server ถ้าทำได้ แต่ต้องออกจากระบบฝั่งเครื่องได้เสมอแม้เน็ตล่ม
     ++authCheckVersion.current
-    const { error: sessionError } = await supabase.rpc("staff_logout")
-    if (sessionError) throw sessionError
-    const { error: signOutError } = await supabase.auth.signOut()
-    if (signOutError) throw signOutError
+    try { await supabase.rpc("staff_logout") } catch {}
+    try { await supabase.auth.signOut() } catch {}
     setStaff(null)
   }
 
