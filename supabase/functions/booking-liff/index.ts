@@ -40,11 +40,18 @@ async function verifyLineIdToken(idToken: string) {
   return profile as { sub: string; name?: string }
 }
 
-async function getBookableSlots(admin: ReturnType<typeof createClient>, date: string, serviceId: string) {
+function normalizeServiceIds(value: unknown) {
+  const ids = Array.isArray(value) ? value : [value]
+  return Array.from(new Set(ids.map((id) => String(id || "").trim()).filter(Boolean)))
+}
+
+async function getBookableSlots(admin: ReturnType<typeof createClient>, date: string, requestedServiceIds: unknown) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("invalid_date")
-  const { data: service, error: serviceError } = await admin
-    .from("services").select("id, name, duration, price").eq("id", serviceId).eq("is_active", true).single()
-  if (serviceError || !service) throw new Error("service_not_found")
+  const serviceIds = normalizeServiceIds(requestedServiceIds)
+  if (!serviceIds.length) throw new Error("service_required")
+  const { data: services, error: serviceError } = await admin
+    .from("services").select("id, name, duration, price").in("id", serviceIds).eq("is_active", true)
+  if (serviceError || !services || services.length !== serviceIds.length) throw new Error("service_not_found")
 
   const [{ data: slots, error: slotsError }, { data: bookings, error: bookingsError }] = await Promise.all([
     admin.from("time_slots").select("id, slot_date, start_time, capacity").eq("slot_date", date).eq("is_active", true).order("start_time"),
@@ -54,7 +61,8 @@ async function getBookableSlots(admin: ReturnType<typeof createClient>, date: st
 
   const slotRows = slots ?? []
   const slotMap = new Map(slotRows.map((slot) => [timeToMinutes(slot.start_time), slot]))
-  const slotCount = Math.max(1, Math.ceil(Number(service.duration) / SLOT_MINUTES))
+  const totalDuration = services.reduce((sum, service) => sum + Number(service.duration), 0)
+  const slotCount = Math.max(1, Math.ceil(totalDuration / SLOT_MINUTES))
   const now = bangkokNow()
   const minimumStart = date === now.date ? Math.ceil(now.minutes / SLOT_MINUTES) * SLOT_MINUTES : null
 
@@ -81,7 +89,7 @@ async function getBookableSlots(admin: ReturnType<typeof createClient>, date: st
     return result
   }, [])
 
-  return { service, slots: bookable }
+  return { serviceIds, services, slots: bookable }
 }
 
 Deno.serve(async (req) => {
@@ -111,19 +119,19 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "slots") {
-      const result = await getBookableSlots(admin, String(body.date || ""), String(body.service_id || ""))
+      const result = await getBookableSlots(admin, String(body.date || ""), body.service_ids ?? body.service_id)
       return json(req, { data: result.slots })
     }
 
     if (body.action === "book") {
-      const serviceId = String(body.service_id || "")
       const slotId = String(body.slot_id || "")
       const date = String(body.date || "")
-      const result = await getBookableSlots(admin, date, serviceId)
+      const result = await getBookableSlots(admin, date, body.service_ids ?? body.service_id)
       const selectedSlot = result.slots.find((slot) => slot.id === slotId)
       if (!selectedSlot) return json(req, { error: "selected_slot_unavailable" }, 409)
       const { data, error } = await admin.from("bookings").insert({
-        service_id: serviceId,
+        service_id: result.serviceIds[0],
+        service_ids: result.serviceIds.length > 1 ? result.serviceIds : null,
         slot_id: slotId,
         slot_date: selectedSlot.slot_date,
         start_time: selectedSlot.start_time,
