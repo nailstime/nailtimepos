@@ -202,7 +202,7 @@ export default function CustomerDisplay() {
           </div>
           {Number(order.discount) > 0 && (
             <div className="mt-2 flex justify-between text-success">
-              <span>ส่วนลด</span><span>-฿{baht(order.discount)}</span>
+              <span>{order.promotion_name || 'ส่วนลด'}</span><span>-฿{baht(order.discount)}</span>
             </div>
           )}
           <div className="mt-5 flex justify-between border-t-2 border-ink pt-5 text-2xl font-semibold">

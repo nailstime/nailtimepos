@@ -9,16 +9,23 @@ export default function Catalog() {
   const [services, setServices] = useState([])
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [promotions, setPromotions] = useState([])
   const [form, setForm] = useState({ kind: "service", category_id: "", name: "", price: "", counts: true })
+  const [promotionForm, setPromotionForm] = useState({ name: "", discount_type: "percent", discount_value: "", min_subtotal: "" })
   const [error, setError] = useState("")
 
   async function load() {
-    const [{ data: sv }, { data: pd }, { data: ct }] = await Promise.all([
+    const results = await Promise.all([
       supabase.from("services").select("*").order("sort_order"),
       supabase.from("products").select("*").order("name"),
       supabase.from("catalog_categories").select("*").order("sort_order").order("name"),
+      supabase.rpc("promotion_list"),
     ])
-    setServices(sv || []); setProducts(pd || []); setCategories(ct || [])
+    const failed = results.find((result) => result.error)
+    if (failed) return setError(failed.error.message)
+    const [{ data: sv }, { data: pd }, { data: ct }, { data: pr }] = results
+    setServices(sv || []); setProducts(pd || []); setCategories(ct || []); setPromotions(pr || [])
+    setError("")
   }
   useEffect(() => { load() }, [])
 
@@ -33,6 +40,72 @@ export default function Catalog() {
     })
     setForm({ ...form, name: "", price: "" })
     load()
+  }
+
+  async function addPromotion() {
+    const name = promotionForm.name.trim()
+    const value = Number(promotionForm.discount_value)
+    const minimum = promotionForm.min_subtotal === '' ? 0 : Number(promotionForm.min_subtotal)
+    if (!name) return setError('กรุณาระบุชื่อโปรโมชัน')
+    if (!Number.isFinite(value) || value <= 0 || (promotionForm.discount_type === 'percent' && value > 100)) {
+      return setError(promotionForm.discount_type === 'percent' ? 'ส่วนลดเปอร์เซ็นต์ต้องมากกว่า 0 และไม่เกิน 100' : 'กรุณาระบุส่วนลดเป็นจำนวนเงินที่มากกว่า 0')
+    }
+    if (!Number.isFinite(minimum) || minimum < 0) return setError('ยอดขั้นต่ำต้องเป็น 0 หรือมากกว่า')
+    setError('')
+    const { error: rpcError } = await supabase.rpc('promotion_create', {
+      p_name: name,
+      p_discount_type: promotionForm.discount_type,
+      p_discount_value: value,
+      p_min_subtotal: minimum,
+    })
+    if (rpcError) return setError(rpcError.message)
+    setPromotionForm({ name: '', discount_type: 'percent', discount_value: '', min_subtotal: '' })
+    load()
+  }
+
+  async function togglePromotion(promotion) {
+    setError('')
+    const { error: rpcError } = await supabase.rpc('promotion_toggle', { p_promotion: promotion.id })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+
+  async function deletePromotion(promotion) {
+    const confirmed = await openConfirm({
+      title: 'ลบโปรโมชันถาวร',
+      description: `“${promotion.name}” จะไม่สามารถเลือกใช้กับบิลใหม่ได้อีก\n\nบิลเก่าจะยังแสดงชื่อและส่วนลดเดิมครบถ้วน`,
+      confirmLabel: 'ลบโปรโมชัน',
+      cancelLabel: 'ยกเลิก',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setError('')
+    const { error: rpcError } = await supabase.rpc('promotion_delete', { p_promotion: promotion.id })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+
+  async function updatePromotion(promotion, draft) {
+    const name = draft.name.trim()
+    const value = Number(draft.discount_value)
+    const minimum = draft.min_subtotal === '' ? 0 : Number(draft.min_subtotal)
+    if (!name) return setError('กรุณาระบุชื่อโปรโมชัน')
+    if (!Number.isFinite(value) || value <= 0 || (draft.discount_type === 'percent' && value > 100)) return setError('ข้อมูลส่วนลดไม่ถูกต้อง')
+    if (!Number.isFinite(minimum) || minimum < 0) return setError('ยอดขั้นต่ำต้องเป็น 0 หรือมากกว่า')
+    setError('')
+    const { error: rpcError } = await supabase.rpc('promotion_update', {
+      p_promotion: promotion.id,
+      p_name: name,
+      p_discount_type: draft.discount_type,
+      p_discount_value: value,
+      p_min_subtotal: minimum,
+    })
+    if (rpcError) {
+      setError(rpcError.message)
+      return false
+    }
+    await load()
+    return true
   }
 
   async function toggleCounts(table, it) {
@@ -52,6 +125,21 @@ export default function Catalog() {
       p_item: it.id,
       p_field: "active",
     })
+    if (rpcError) return setError(rpcError.message)
+    load()
+  }
+  async function deleteCatalogItem(table, it) {
+    const kind = table === 'services' ? 'service' : 'product'
+    const confirmed = await openConfirm({
+      title: `ลบ${kind === 'service' ? 'บริการ' : 'สินค้า'}ถาวร`,
+      description: `“${it.name}” จะหายจากระบบทันที\n\nลบได้เฉพาะรายการที่ยังไม่มีประวัติบิลหรือสต็อกเท่านั้น หากเคยใช้งานแล้วให้กด “ปิด” แทน`,
+      confirmLabel: 'ลบถาวร',
+      cancelLabel: 'ยกเลิก',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setError('')
+    const { error: rpcError } = await supabase.rpc('catalog_delete', { p_kind: kind, p_item: it.id })
     if (rpcError) return setError(rpcError.message)
     load()
   }
@@ -246,7 +334,7 @@ export default function Catalog() {
     }
 
     return <>
-    <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto]")}>
+    <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto]")}>
       <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
       <span className="text-right font-bold tabular-nums">{isVariablePrice ? `฿${baht(it.min_price)}–${baht(it.max_price)}` : `฿${baht(it.price)}`}</span>
       {isProduct && (
@@ -260,6 +348,7 @@ export default function Catalog() {
         {isActive ? "ปิด" : "เปิด"}
       </button>
       <button onClick={beginEdit} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-rosedeep hover:bg-rose/10" aria-label={`แก้ไข ${it.name}`}>แก้ไข</button>
+      <button onClick={() => deleteCatalogItem(table, it)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-danger hover:bg-danger/5" aria-label={`ลบ ${it.name}`}>ลบ</button>
     </div>
     {editing && <form onSubmit={saveEdit} className="border-b border-mist bg-porcelain/65 px-3 py-4 sm:px-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_auto] xl:items-end">
@@ -270,6 +359,61 @@ export default function Catalog() {
       </div>
       <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditing(false)} disabled={saving} className="btn-ghost">ยกเลิก</button><button disabled={saving} className="btn-rose">{saving ? "กำลังบันทึก…" : "บันทึกการแก้ไข"}</button></div>
     </form>}
+    </>
+  }
+
+  const PromotionRow = ({ promotion }) => {
+    const [editing, setEditing] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const [draft, setDraft] = useState({
+      name: promotion.name,
+      discount_type: promotion.discount_type,
+      discount_value: String(promotion.discount_value),
+      min_subtotal: String(promotion.min_subtotal ?? 0),
+    })
+    const label = promotion.discount_type === 'percent'
+      ? `ลด ${Number(promotion.discount_value)}%`
+      : `ลด ฿${baht(promotion.discount_value)}`
+
+    function beginEdit() {
+      setDraft({
+        name: promotion.name,
+        discount_type: promotion.discount_type,
+        discount_value: String(promotion.discount_value),
+        min_subtotal: String(promotion.min_subtotal ?? 0),
+      })
+      setEditing(true)
+    }
+
+    async function save(event) {
+      event.preventDefault()
+      setSaving(true)
+      const saved = await updatePromotion(promotion, draft)
+      setSaving(false)
+      if (saved) setEditing(false)
+    }
+
+    return <>
+      <div className="grid min-h-16 grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 border-b border-mist py-3 text-sm last:border-0">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2"><span className={'font-semibold ' + (!promotion.active ? 'text-sagegray line-through' : '')}>{promotion.name}</span><span className="badge-neutral">{label}</span></div>
+          <p className="mt-1 text-xs text-sagegray">{Number(promotion.min_subtotal) > 0 ? `ใช้ได้เมื่อยอดตั้งแต่ ฿${baht(promotion.min_subtotal)}` : 'ไม่มีขั้นต่ำ'}</p>
+        </div>
+        <button type="button" onClick={() => togglePromotion(promotion)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-sagegray hover:bg-porcelain hover:text-ink">
+          {promotion.active ? 'ปิด' : 'เปิด'}
+        </button>
+        <button type="button" onClick={beginEdit} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-rosedeep hover:bg-rose/10">แก้ไข</button>
+        <button type="button" onClick={() => deletePromotion(promotion)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-danger hover:bg-danger/5">ลบ</button>
+      </div>
+      {editing && <form onSubmit={save} className="border-b border-mist bg-porcelain/65 p-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_130px_130px_160px] xl:items-end">
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ชื่อโปรโมชัน</span><input className="input" required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">รูปแบบส่วนลด</span><select className="input" value={draft.discount_type} onChange={(event) => setDraft({ ...draft, discount_type: event.target.value })}><option value="percent">เปอร์เซ็นต์ (%)</option><option value="fixed">จำนวนเงิน (บาท)</option></select></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{draft.discount_type === 'percent' ? 'ลดกี่ %' : 'ลดกี่บาท'}</span><input className="input" required min="0.01" max={draft.discount_type === 'percent' ? '100' : undefined} inputMode="decimal" value={draft.discount_value} onChange={(event) => setDraft({ ...draft, discount_value: event.target.value })} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ยอดขั้นต่ำ (บาท)</span><input className="input" min="0" inputMode="decimal" value={draft.min_subtotal} onChange={(event) => setDraft({ ...draft, min_subtotal: event.target.value })} /></label>
+        </div>
+        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditing(false)} disabled={saving} className="btn-ghost">ยกเลิก</button><button disabled={saving} className="btn-rose">{saving ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}</button></div>
+      </form>}
     </>
   }
 
@@ -302,6 +446,26 @@ export default function Catalog() {
             onChange={(e) => setForm({ ...form, counts: e.target.checked })} />
           นับยอดสะสม NTime
         </label>
+      </section>
+
+      <section className="card mb-5 overflow-hidden">
+        <div className="border-b border-mist px-5 py-4 sm:px-6">
+          <p className="section-title">โปรโมชันและส่วนลด</p>
+          <p className="section-note">ส่วนลดจะคำนวณจากยอดก่อนลดใน POS และใช้ได้เพียง 1 โปรโมชันต่อบิล</p>
+        </div>
+        <div className="border-b border-mist bg-porcelain/45 p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_150px_140px_170px_auto] xl:items-end">
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ชื่อโปรโมชัน</span><input className="input" maxLength={160} value={promotionForm.name} onChange={(event) => setPromotionForm({ ...promotionForm, name: event.target.value })} placeholder="เช่น ลดเปิดร้าน" /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">รูปแบบส่วนลด</span><select className="input" value={promotionForm.discount_type} onChange={(event) => setPromotionForm({ ...promotionForm, discount_type: event.target.value })}><option value="percent">เปอร์เซ็นต์ (%)</option><option value="fixed">จำนวนเงิน (บาท)</option></select></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{promotionForm.discount_type === 'percent' ? 'ลดกี่ %' : 'ลดกี่บาท'}</span><input className="input" min="0.01" max={promotionForm.discount_type === 'percent' ? '100' : undefined} inputMode="decimal" value={promotionForm.discount_value} onChange={(event) => setPromotionForm({ ...promotionForm, discount_value: event.target.value })} placeholder={promotionForm.discount_type === 'percent' ? '10' : '100'} /></label>
+            <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ใช้ได้เมื่อยอดตั้งแต่</span><input className="input" min="0" inputMode="decimal" value={promotionForm.min_subtotal} onChange={(event) => setPromotionForm({ ...promotionForm, min_subtotal: event.target.value })} placeholder="ไม่มีขั้นต่ำ" /></label>
+            <button type="button" onClick={addPromotion} className="btn-rose">เพิ่มโปรโมชัน</button>
+          </div>
+        </div>
+        <div className="px-5 py-2 sm:px-6">
+          {promotions.map((promotion) => <PromotionRow key={promotion.id} promotion={promotion} />)}
+          {promotions.length === 0 && <div className="empty-state my-3">ยังไม่มีโปรโมชัน — เพิ่มส่วนลดที่ต้องการใช้ใน POS ได้จากด้านบน</div>}
+        </div>
       </section>
 
       <section className="card mb-5 p-5 sm:p-6">

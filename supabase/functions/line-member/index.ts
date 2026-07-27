@@ -1,6 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.7"
 import { corsHeaders, json } from "../_shared/http.ts"
-import { isRateLimited } from "../_shared/rate-limit.ts"
+
+function clientIp(req: Request) {
+  return (req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim()
+}
 
 async function verifyLineIdToken(idToken: string) {
   const channelId = Deno.env.get("LINE_LOGIN_CHANNEL_ID")
@@ -22,16 +25,29 @@ async function verifyLineIdToken(idToken: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) })
   if (req.method !== "POST") return json(req, { error: "method_not_allowed" }, 405)
-  if (isRateLimited(req)) return json(req, { error: "too_many_requests" }, 429)
+
+  const url = Deno.env.get("SUPABASE_URL")
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+  if (!url || !serviceKey) return json(req, { error: "server_not_configured" }, 503)
+  const admin = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+
+  // Rate limit อยู่ใน Postgres เพื่อให้คุมข้าม Edge isolate ได้จริง ไม่ใช่แค่ memory ของ instance เดียว
+  const { data: limited, error: limitError } = await admin.rpc("consume_line_member_rate_limit", {
+    p_key: `line-member:${clientIp(req)}`,
+    p_limit: 20,
+    p_window_seconds: 60,
+  })
+  if (limitError) {
+    console.error("line-member rate limit unavailable", { message: limitError.message })
+    return json(req, { error: "rate_limit_unavailable" }, 503)
+  }
+  if (limited) return json(req, { error: "too_many_requests" }, 429)
+
   try {
     const body = await req.json()
     const profile = await verifyLineIdToken(String(body.id_token || ""))
-    const url = Deno.env.get("SUPABASE_URL")
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-    if (!url || !serviceKey) throw new Error("server_not_configured")
-    const admin = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
 
     if (body.action === "me") {
       const { data, error } = await admin.rpc("line_get_member", { p_line_user_id: profile.sub })

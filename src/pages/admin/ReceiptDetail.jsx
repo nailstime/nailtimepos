@@ -88,7 +88,7 @@ export default function ReceiptDetail() {
 
           <div className="ml-auto mt-5 max-w-sm space-y-3 text-sm">
             <div className="flex justify-between gap-6"><span className="text-sagegray">ยอดก่อนส่วนลด</span><span>฿{baht(order.subtotal)}</span></div>
-            {Number(order.discount) > 0 && <div className="flex justify-between gap-6 text-danger"><span>ส่วนลด</span><span>-฿{baht(order.discount)}</span></div>}
+            {Number(order.discount) > 0 && <div className="flex justify-between gap-6 text-danger"><span>{order.promotion_name || 'ส่วนลด'}</span><span>-฿{baht(order.discount)}</span></div>}
             <div className="flex justify-between gap-6 border-t border-ink pt-4 text-xl font-bold"><span>ยอดสุทธิ</span><span>฿{baht(order.total)}</span></div>
           </div>
         </section>

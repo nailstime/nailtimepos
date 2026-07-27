@@ -36,7 +36,7 @@ export function printThermalReceipt(printWindow, receipt) {
     ? `<div class="meta">ลูกค้า: ${escapeHtml(receipt.member.name || receipt.member.phone || 'สมาชิก')}</div>`
     : ''
   const discount = Number(receipt.order.discount) > 0
-    ? `<div class="total-row"><span>ส่วนลด</span><span>- ${escapeHtml(baht(receipt.order.discount))}</span></div>`
+    ? `<div class="total-row"><span>${escapeHtml(receipt.order.promotion_name || 'ส่วนลด')}</span><span>- ${escapeHtml(baht(receipt.order.discount))}</span></div>`
     : ''
 
   printWindow.document.open()

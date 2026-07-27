@@ -22,6 +22,20 @@ function catalogPriceLabel(item) {
   return `฿${baht(item.price)}`
 }
 
+function promotionLabel(promotion) {
+  return promotion.discount_type === 'percent'
+    ? `ลด ${Number(promotion.discount_value)}%`
+    : `ลด ฿${baht(promotion.discount_value)}`
+}
+
+function calculatePromotionDiscount(promotion, subtotal) {
+  if (!promotion || subtotal < Number(promotion.min_subtotal || 0)) return 0
+  const amount = promotion.discount_type === 'percent'
+    ? subtotal * Number(promotion.discount_value) / 100
+    : Number(promotion.discount_value)
+  return Math.min(subtotal, Math.round((amount + Number.EPSILON) * 100) / 100)
+}
+
 function normalizeCatalogSearch(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -59,11 +73,13 @@ export default function PosScreen() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [rewards, setRewards] = useState([])
+  const [promotions, setPromotions] = useState([])
   const [techs, setTechs] = useState([])
   const [tab, setTab] = useState('service')
   const [categoryId, setCategoryId] = useState('')
   const [catalogSearch, setCatalogSearch] = useState('')
   const [cart, setCart] = useState([])
+  const [selectedPromotion, setSelectedPromotion] = useState(null)
   const [member, setMember] = useState(null)
   const [phone, setPhone] = useState('')
   const [stage, setStage] = useState('cart') // cart | paying | done
@@ -120,6 +136,7 @@ export default function PosScreen() {
     try { window.sessionStorage.setItem(COUNTER_STORAGE_KEY, normalizedCode) } catch {}
     setCounterCode(normalizedCode)
     setCart([])
+    setSelectedPromotion(null)
     setMember(null)
     setPhone('')
     setOrder(null)
@@ -148,6 +165,7 @@ export default function PosScreen() {
     try { window.sessionStorage.removeItem(COUNTER_STORAGE_KEY) } catch {}
     setCounterCode('')
     setCart([])
+    setSelectedPromotion(null)
     setMember(null)
     setPhone('')
     setOrder(null)
@@ -214,20 +232,44 @@ export default function PosScreen() {
       supabase.from('catalog_categories').select('*').order('sort_order').order('name'),
       supabase.from('rewards').select('*').eq('active', true).order('points_cost'),
       supabase.from('staff').select('id,name').eq('role', 'technician').eq('active', true),
+      supabase.rpc('promotion_list'),
     ])
     const failed = results.find((result) => result.error)
     if (failed) {
       setCatalogError(failed.error.message)
       return
     }
-    const [{ data: sv }, { data: pd }, { data: ct }, { data: rw }, { data: st }] = results
+    const [{ data: sv }, { data: pd }, { data: ct }, { data: rw }, { data: st }, { data: pm }] = results
     setServices(sv || []); setProducts(pd || []); setRewards(rw || [])
     setCategories(ct || [])
     setTechs(st || [])
+    // Owners can manage inactive promotions in Catalog, but POS must never
+    // offer them for selection even when the same owner is signed in here.
+    const activePromotions = (pm || []).filter((promotion) => promotion.active)
+    setPromotions(activePromotions)
+    setSelectedPromotion((current) => (
+      current && activePromotions.some((promotion) => promotion.id === current.id)
+        ? current
+        : null
+    ))
     setCatalogError('')
   }, [])
 
   useEffect(() => { loadCatalog() }, [loadCatalog])
+
+  // Catalog is maintained from Back Office in a different tab/device. Refresh
+  // when staff return to POS instead of leaving stale, closed items selectable.
+  useEffect(() => {
+    function refreshWhenVisible() {
+      if (document.visibilityState === 'visible') loadCatalog()
+    }
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [loadCatalog])
 
   useEffect(() => {
     if (counterCode) restoreCounter()
@@ -250,7 +292,11 @@ export default function PosScreen() {
     return () => window.clearInterval(timer)
   }, [order?.id, stage, refreshOrder])
 
-  const total = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart])
+  const subtotal = useMemo(() => cart.reduce((s, c) => s + c.price * c.qty, 0), [cart])
+  const promotionMinimum = Number(selectedPromotion?.min_subtotal || 0)
+  const promotionEligible = !selectedPromotion || subtotal >= promotionMinimum
+  const promotionDiscount = calculatePromotionDiscount(selectedPromotion, subtotal)
+  const total = subtotal - promotionDiscount
   const redeemInCart = cart.filter((c) => c.item_type === 'redemption')
   const tabCategories = useMemo(() => (
     tab === 'service' || tab === 'product'
@@ -258,7 +304,7 @@ export default function PosScreen() {
       : []
   ), [categories, tab])
   const visibleCatalogItems = useMemo(() => {
-    const source = tab === 'service' ? services : tab === 'product' ? products : rewards
+    const source = tab === 'service' ? services : tab === 'product' ? products : tab === 'promotion' ? promotions : rewards
     return source.filter((item) => (
       (!categoryId || (categoryId === '__uncategorized__' ? !item.category_id : item.category_id === categoryId))
       && fuzzyCatalogMatch(item.name, catalogSearch)
@@ -268,6 +314,17 @@ export default function PosScreen() {
   function selectCatalogTab(nextTab) {
     setTab(nextTab)
     setCategoryId('')
+    loadCatalog()
+  }
+
+  function selectPromotion(promotion) {
+    const minimum = Number(promotion.min_subtotal || 0)
+    if (subtotal < minimum) {
+      setErr(`โปรโมชันนี้ใช้ได้เมื่อยอดตั้งแต่ ฿${baht(minimum)} — เพิ่มอีก ฿${baht(minimum - subtotal)}`)
+      return
+    }
+    setSelectedPromotion(promotion)
+    setErr('')
   }
 
   async function addItem(it, type) {
@@ -348,6 +405,7 @@ export default function PosScreen() {
     })
     if (!confirmed) return
     setCart([])
+    setSelectedPromotion(null)
     setErr('')
   }
 
@@ -415,6 +473,10 @@ export default function PosScreen() {
       setErr('เลือกช่างให้ครบทุกรายการก่อนเปิดบิล — เพื่อให้ค่าคอมมิชชั่นเข้าถูกคน')
       return
     }
+    if (!promotionEligible) {
+      setErr(`โปรโมชัน ${selectedPromotion.name} ใช้ได้เมื่อยอดตั้งแต่ ฿${baht(promotionMinimum)}`)
+      return
+    }
     const zeroBill = total === 0
     const confirmed = await openConfirm({
       title: zeroBill ? 'ยืนยันเปิดบิลใช้ NTime' : 'ยืนยันเปิดบิล',
@@ -434,12 +496,15 @@ export default function PosScreen() {
         qty: c.qty,
         ...(c.custom_price_reason ? { unit_price: c.price, custom_price_reason: c.custom_price_reason } : {}),
       }))
-      const rpcName = bookingId ? 'create_order_from_booking' : 'create_order'
+      const rpcName = selectedPromotion
+        ? (bookingId ? 'create_order_from_booking_with_promotion' : 'create_order_with_promotion')
+        : (bookingId ? 'create_order_from_booking' : 'create_order')
       const params = {
         p_counter_code: counterCode,
         p_member: member?.id ?? null,
         p_items: items,
         ...(bookingId ? { p_booking: bookingId } : {}),
+        ...(selectedPromotion ? { p_promotion: selectedPromotion.id } : {}),
       }
       const { data, error } = await supabase.rpc(rpcName, params)
       if (error) throw error
@@ -566,7 +631,7 @@ export default function PosScreen() {
   async function newBill() {
     const { error } = await supabase.rpc('clear_counter', { p_counter_code: counterCode })
     if (error) return setErr(error.message)
-    setCart([]); setMember(null); setPhone(''); setOrder(null)
+    setCart([]); setSelectedPromotion(null); setMember(null); setPhone(''); setOrder(null)
     setResult(null); setDiscountReq(null); setPendingRedeems(0); setPendingApproval(false); setLinkCode(''); setStage('cart')
     if (bookingId) navigate('/pos', { replace: true })
     loadPendingOrders()
@@ -660,7 +725,7 @@ export default function PosScreen() {
           <p className="mt-2 text-sm font-semibold text-sagegray">บิล {order.order_no}</p>
           <p className="mt-3 font-display text-5xl font-semibold tracking-tight">฿{baht(order.total)}</p>
           {Number(order.discount) > 0 && (
-            <p className="mt-2 text-sm font-medium text-success">ส่วนลด ฿{baht(order.discount)} (อนุมัติแล้ว)</p>
+            <p className="mt-2 text-sm font-medium text-success">{order.promotion_name || 'ส่วนลด'} ฿{baht(order.discount)} (ใช้แล้ว)</p>
           )}
           {pendingRedeems > 0 && (
             <p className="mt-5 rounded-xl border border-rose/15 bg-rose/5 p-3 text-sm font-medium text-rosedeep">
@@ -677,7 +742,7 @@ export default function PosScreen() {
             {busy ? 'กำลังบันทึก…' : zeroBill ? 'ปิดบิล (ยอด 0)' : 'ยืนยันรับเงินแล้ว'}
           </button>
           <div className="flex gap-2 mt-3">
-            <button onClick={requestDiscount} className="btn-ghost flex-1 text-sm">ขอส่วนลด</button>
+            {Number(order.discount) === 0 && <button onClick={requestDiscount} className="btn-ghost flex-1 text-sm">ขอส่วนลด</button>}
             <button onClick={requestVoid} className="btn-ghost flex-1 text-sm">ขอยกเลิกบิล</button>
           </div>
         </Center>
@@ -733,6 +798,7 @@ export default function PosScreen() {
           <div className="soft-panel hide-scrollbar mb-4 flex gap-1.5 overflow-x-auto p-1.5">
             <button onClick={() => selectCatalogTab('service')} className={(tab === 'service' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>บริการ</button>
             <button onClick={() => selectCatalogTab('product')} className={(tab === 'product' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>สินค้า</button>
+            <button onClick={() => selectCatalogTab('promotion')} className={(tab === 'promotion' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ส่วนลด</button>
             <button onClick={() => selectCatalogTab('redeem')} className={(tab === 'redeem' ? 'btn-rose' : 'btn-ghost') + ' min-w-28 flex-1'}>ใช้ NTime</button>
           </div>
           <div className="mb-4 space-y-3">
@@ -741,8 +807,8 @@ export default function PosScreen() {
               type="search"
               value={catalogSearch}
               onChange={(event) => setCatalogSearch(event.target.value)}
-              placeholder={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'} — พิมพ์บางส่วนได้`}
-              aria-label={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'}`}
+              placeholder={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : tab === 'promotion' ? 'ค้นหาโปรโมชันหรือส่วนลด' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'} — พิมพ์บางส่วนได้`}
+              aria-label={tab === 'redeem' ? 'ค้นหารางวัลด้วย NTime' : tab === 'promotion' ? 'ค้นหาโปรโมชันหรือส่วนลด' : `ค้นหา${tab === 'service' ? 'บริการ' : 'สินค้า'}`}
             />
             {tabCategories.length > 0 && (
               <div className="hide-scrollbar flex gap-2 overflow-x-auto pb-0.5" aria-label="กรองตามหมวดหมู่">
@@ -762,7 +828,20 @@ export default function PosScreen() {
                     <p className="mt-3 text-sm font-bold text-rosedeep">{it.points_cost} NTime</p>
                   </button>
                 ))
-              : visibleCatalogItems.map((it) => (
+              : tab === 'promotion'
+                ? visibleCatalogItems.map((it) => {
+                    const minimum = Number(it.min_subtotal || 0)
+                    const unavailable = subtotal < minimum
+                    const selected = selectedPromotion?.id === it.id
+                    return <button key={it.id} onClick={() => selectPromotion(it)} disabled={unavailable}
+                      className={'card min-h-32 p-4 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose ' + (selected ? 'border-rose bg-rose/5 ring-1 ring-rose/30' : 'hover:-translate-y-0.5 hover:border-rose/40 hover:shadow-md') + (unavailable ? ' cursor-not-allowed opacity-55' : '')}>
+                      <p className="font-semibold leading-6">{it.name}</p>
+                      <p className="mt-3 text-lg font-bold tabular-nums text-rosedeep">{promotionLabel(it)}</p>
+                      <p className="mt-1 text-xs font-medium text-sagegray">{minimum > 0 ? `ใช้ได้เมื่อยอด ฿${baht(minimum)} ขึ้นไป` : 'ใช้ได้ทุกยอด'}</p>
+                      {selected && <p className="mt-2 text-xs font-semibold text-success">เลือกใช้กับบิลนี้แล้ว</p>}
+                    </button>
+                  })
+                : visibleCatalogItems.map((it) => (
                   <button key={it.id} onClick={() => addItem(it, tab)}
                     className="card group min-h-32 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-rose/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
                     <p className="font-semibold leading-6 group-hover:text-rosedeep">{it.name}</p>
@@ -846,11 +925,21 @@ export default function PosScreen() {
             </div>
           ))}
 
-          <div className="mt-4 flex justify-between border-t border-mist pt-4 text-lg font-semibold">
-            <span>ยอดรวม</span><span className="text-2xl tabular-nums">฿{baht(total)}</span>
+          {selectedPromotion && (
+            <div className="mt-3 rounded-xl border border-rose/20 bg-rose/5 p-3 text-sm">
+              <div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-rosedeep">{selectedPromotion.name}</p><p className="mt-0.5 text-xs text-sagegray">{promotionLabel(selectedPromotion)}{promotionMinimum > 0 ? ` · ขั้นต่ำ ฿${baht(promotionMinimum)}` : ''}</p></div><button type="button" onClick={() => setSelectedPromotion(null)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-danger hover:bg-danger/5">เอาออก</button></div>
+              {promotionEligible && <div className="mt-2 flex justify-between font-semibold text-success"><span>ส่วนลด</span><span>-฿{baht(promotionDiscount)}</span></div>}
+              {!promotionEligible && <p className="mt-2 text-xs font-medium text-danger">ยอดยังไม่ถึงขั้นต่ำของโปรโมชันนี้</p>}
+            </div>
+          )}
+          <div className="mt-4 space-y-2 border-t border-mist pt-4">
+            {selectedPromotion && <div className="flex justify-between text-sm text-sagegray"><span>รวมก่อนส่วนลด</span><span>฿{baht(subtotal)}</span></div>}
+            <div className="flex justify-between text-lg font-semibold">
+              <span>{selectedPromotion ? 'ยอดสุทธิ' : 'ยอดรวม'}</span><span className="text-2xl tabular-nums">฿{baht(total)}</span>
+            </div>
           </div>
           {err && <p className="text-rosedeep text-sm mt-2">{err}</p>}
-          <button onClick={checkout} disabled={!cart.length || busy} className="btn-rose w-full mt-3 disabled:opacity-40">
+          <button onClick={checkout} disabled={!cart.length || busy || !promotionEligible} className="btn-rose w-full mt-3 disabled:opacity-40">
             {busy ? 'กำลังสร้างบิล…' : total === 0 && cart.length ? 'ยืนยันบิลใช้ NTime' : 'ชำระเงิน (QR)'}
           </button>
           </div>
