@@ -51,7 +51,7 @@ async function getBookableSlots(admin: ReturnType<typeof createClient>, date: st
   const serviceIds = normalizeServiceIds(requestedServiceIds)
   if (!serviceIds.length) throw new Error("service_required")
   const { data: services, error: serviceError } = await admin
-    .from("services").select("id, name, duration, price").in("id", serviceIds).eq("is_active", true)
+    .from("services").select("id, name, duration, price").in("id", serviceIds).eq("is_active", true).eq("is_bookable", true)
   if (serviceError || !services || services.length !== serviceIds.length) throw new Error("service_not_found")
 
   const [{ data: slots, error: slotsError }, { data: bookings, error: bookingsError }] = await Promise.all([
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
     if (body.action === "services") {
       const { data, error } = await admin.from("services")
-        .select("id, name, duration, price").eq("is_active", true).order("sort_order")
+        .select("id, name, duration, price").eq("is_active", true).eq("is_bookable", true).order("sort_order")
       if (error) throw new Error("services_unavailable")
       return json(req, { data: data ?? [] })
     }

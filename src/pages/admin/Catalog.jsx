@@ -161,6 +161,16 @@ export default function Catalog() {
       setError(rpcError.message)
       return false
     }
+    if (table === 'services' && Boolean(draft.is_bookable) !== Boolean(it.is_bookable)) {
+      const { error: bookingError } = await supabase.rpc('catalog_set_booking_visibility', {
+        p_service: it.id,
+        p_is_bookable: Boolean(draft.is_bookable),
+      })
+      if (bookingError) {
+        setError(bookingError.message)
+        return false
+      }
+    }
     await load()
     return true
   }
@@ -313,6 +323,7 @@ export default function Catalog() {
       price: String(it.price ?? 0),
       counts_toward_points: Boolean(it.counts_toward_points),
       category_id: it.category_id || '',
+      is_bookable: Boolean(it.is_bookable),
     })
 
     function beginEdit() {
@@ -321,6 +332,7 @@ export default function Catalog() {
         price: String(it.price ?? 0),
         counts_toward_points: Boolean(it.counts_toward_points),
         category_id: it.category_id || '',
+        is_bookable: Boolean(it.is_bookable),
       })
       setEditing(true)
     }
@@ -335,7 +347,7 @@ export default function Catalog() {
 
     return <>
     <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto]")}>
-      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
+      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{!isProduct && <span className={(it.is_bookable ? 'badge-success' : 'badge-neutral') + ' shrink-0 no-underline'}>{it.is_bookable ? 'จองออนไลน์' : 'ไม่แสดงจอง'}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
       <span className="text-right font-bold tabular-nums">{isVariablePrice ? `฿${baht(it.min_price)}–${baht(it.max_price)}` : `฿${baht(it.price)}`}</span>
       {isProduct && (
         <div className="flex items-center justify-end gap-1"><button onClick={() => receiveStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-rosedeep hover:bg-rose/10">รับเข้า</button><button onClick={() => adjustStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-danger hover:bg-danger/5">ตัด</button></div>
@@ -351,11 +363,12 @@ export default function Catalog() {
       <button onClick={() => deleteCatalogItem(table, it)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-danger hover:bg-danger/5" aria-label={`ลบ ${it.name}`}>ลบ</button>
     </div>
     {editing && <form onSubmit={saveEdit} className="border-b border-mist bg-porcelain/65 px-3 py-4 sm:px-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_auto] xl:items-end">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_160px_140px_auto_auto] xl:items-end">
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">ชื่อรายการ</span><input className="input" required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">หมวดหมู่</span><select className="input" value={draft.category_id} onChange={(event) => setDraft({ ...draft, category_id: event.target.value })}><option value="">ยังไม่จัดหมวด</option>{categoriesFor(table === 'services' ? 'service' : 'product').map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
         <label className="block"><span className="mb-1.5 block text-xs font-semibold text-sagegray">{isVariablePrice ? "ช่วงราคา" : "ราคา (บาท)"}</span><input className="input" required disabled={isVariablePrice} inputMode="decimal" value={isVariablePrice ? `${baht(it.min_price)}–${baht(it.max_price)}` : draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} />{isVariablePrice && <span className="mt-1 block text-xs text-sagegray">POS จะขอราคาและรายละเอียดทุกครั้ง</span>}</label>
         <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.counts_toward_points} onChange={(event) => setDraft({ ...draft, counts_toward_points: event.target.checked })} />นับยอดสะสม NTime</label>
+        {!isProduct && <label className="flex min-h-11 items-center gap-2 rounded-xl bg-white px-3 text-sm font-medium text-sagegray"><input type="checkbox" className="h-4 w-4 accent-rose" checked={draft.is_bookable} onChange={(event) => setDraft({ ...draft, is_bookable: event.target.checked })} />แสดงในการจองออนไลน์</label>}
       </div>
       <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setEditing(false)} disabled={saving} className="btn-ghost">ยกเลิก</button><button disabled={saving} className="btn-rose">{saving ? "กำลังบันทึก…" : "บันทึกการแก้ไข"}</button></div>
     </form>}
