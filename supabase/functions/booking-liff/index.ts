@@ -2,7 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.7"
 import { corsHeaders, json } from "../_shared/http.ts"
 
 const SLOT_MINUTES = 15
-const LAST_START_MINUTES = 18 * 60 + 45
+// Last appointment may begin at 18:00 and can occupy slots until 19:30.
+const LAST_START_MINUTES = 18 * 60
 
 function clientIp(req: Request) {
   return (req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim()
