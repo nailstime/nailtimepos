@@ -101,6 +101,7 @@ export default function PosScreen() {
   const [countersLoading, setCountersLoading] = useState(true)
   const [counterError, setCounterError] = useState('')
   const [catalogError, setCatalogError] = useState('')
+  const [bookingAlerts, setBookingAlerts] = useState({ pending_count: 0, upcoming_count: 0 })
 
   const loadCounters = useCallback(async () => {
     setCountersLoading(true)
@@ -212,6 +213,17 @@ export default function PosScreen() {
     setPendingOrders(data || [])
     setPendingErr('')
   }, [])
+
+  const loadBookingAlerts = useCallback(async () => {
+    const { data, error } = await supabase.rpc('pos_booking_alerts')
+    if (!error) setBookingAlerts(data || { pending_count: 0, upcoming_count: 0 })
+  }, [])
+
+  useEffect(() => {
+    loadBookingAlerts()
+    const timer = window.setInterval(loadBookingAlerts, 60_000)
+    return () => window.clearInterval(timer)
+  }, [loadBookingAlerts])
 
   const restoreCounter = useCallback(async () => {
     if (!counterCode) return
@@ -666,6 +678,7 @@ export default function PosScreen() {
     onCustomers: () => navigate('/pos/customers'),
     onBookings: () => navigate('/pos/bookings'),
     onStaffDashboard: () => navigate('/pos/staff-dashboard'),
+    queueCount: Number(bookingAlerts.pending_count || 0) + Number(bookingAlerts.upcoming_count || 0),
     onDashboard: staff.role === 'owner' ? () => navigate('/admin') : null,
     onChangeCounter: changeCounter,
   }
@@ -1094,7 +1107,7 @@ function formatPendingTime(value) {
 function Center({ children }) {
   return <div className="card mx-auto mt-10 max-w-lg p-6 text-center sm:p-9">{children}</div>
 }
-function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendingActive = false, onCustomers, onBookings, onStaffDashboard, onDashboard, onChangeCounter, children }) {
+function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendingActive = false, onCustomers, onBookings, onStaffDashboard, queueCount = 0, onDashboard, onChangeCounter, children }) {
   return (
     <div className="min-h-dvh bg-[radial-gradient(circle_at_top_left,_rgba(169,79,97,0.07),_transparent_32%),#f7f4f2]">
       <header className="sticky top-0 z-20 border-b border-mist bg-white/90 backdrop-blur-xl">
@@ -1108,8 +1121,17 @@ function Shell({ staff, logout, counterCode, pendingCount = 0, onPending, pendin
               onPending={onPending}
               pendingCount={pendingCount}
               pendingActive={pendingActive}
-              onStaffDashboard={onStaffDashboard}
             />}
+            {onStaffDashboard && <button
+              type="button"
+              onClick={onStaffDashboard}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose ${queueCount ? 'border-rose/25 bg-rose/5 text-rosedeep hover:border-rose/50' : 'border-mist bg-white text-sagegray hover:border-blush hover:text-ink'}`}
+              aria-label={`คิวที่ต้องจัดการ${queueCount ? ` ${queueCount} งาน` : ''}`}
+            >
+              <QueueIcon />
+              <span className="hidden md:inline">คิว</span>
+              <span className={queueCount ? 'badge-rose min-h-6 px-2 py-0.5' : 'badge-neutral min-h-6 px-2 py-0.5'}>{queueCount}</span>
+            </button>}
             {onBookings && <button
               onClick={onBookings}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-mist bg-white px-3 text-sm font-semibold text-sagegray transition hover:border-blush hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose"
@@ -1147,7 +1169,7 @@ function CustomerIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c.7-3.5 3.3-5.5 7.5-5.5s6.8 2 7.5 5.5" /></svg>
 }
 
-function QuickMenu({ counterCode, onChangeCounter, onCustomers, onPending, pendingCount = 0, pendingActive = false, onStaffDashboard }) {
+function QuickMenu({ counterCode, onChangeCounter, onCustomers, onPending, pendingCount = 0, pendingActive = false }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef(null)
 
@@ -1192,9 +1214,6 @@ function QuickMenu({ counterCode, onChangeCounter, onCustomers, onPending, pendi
           {onCustomers && <button type="button" role="menuitem" onClick={() => choose(onCustomers)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-ink transition hover:bg-porcelain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
             <CustomerIcon /><span>ข้อมูลลูกค้า</span>
           </button>}
-          {onStaffDashboard && <button type="button" role="menuitem" onClick={() => choose(onStaffDashboard)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-ink transition hover:bg-porcelain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose">
-            <CalendarIcon /><span>คิวที่ต้องจัดการ</span>
-          </button>}
           {onPending && <><div className="mx-2 my-1 border-t border-mist" /><button type="button" role="menuitem" onClick={() => choose(onPending)} className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition hover:bg-porcelain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose ${pendingActive ? 'bg-rose/10 text-rosedeep' : 'text-ink'}`}>
             <ReceiptIcon /><span className="flex-1">บิลค้างรับ</span><span className={pendingCount ? 'badge-rose min-h-6 px-2 py-0.5' : 'badge-neutral min-h-6 px-2 py-0.5'}>{pendingCount}</span>
           </button></>}
@@ -1214,6 +1233,10 @@ function ChevronDownIcon({ className = '' }) {
 
 function CalendarIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3" /><path d="M7.5 3v4M16.5 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01" /></svg>
+}
+
+function QueueIcon() {
+  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" /><circle cx="4" cy="6" r="1" fill="currentColor" /><circle cx="4" cy="12" r="1" fill="currentColor" /><circle cx="4" cy="18" r="1" fill="currentColor" /></svg>
 }
 
 function CounterIcon() {
