@@ -144,7 +144,7 @@ export default function CustomerDisplayMedia() {
         </section>
       </div>
 
-      <section className="card mt-5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6"><div><p className="section-title">Artwork เริ่มต้น</p><p className="section-note">ใช้พื้นหลังและข้อความของ Nail Time & Spa ในระบบ เหมาะเมื่อยังไม่มีโปรโมชั่นให้แสดง</p></div><button onClick={useDefaultArtwork} disabled={saving || loading || campaign?.type === 'artwork'} className="btn-ghost mt-4 w-full sm:mt-0 sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">ใช้ Artwork เริ่มต้น</button></section>
+      <section className="card mt-5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6"><div><p className="section-title">Artwork เริ่มต้น</p><p className="section-note">ใช้พื้นหลังและข้อความของ Nail Time & Spa ในระบบ เหมาะเมื่อยังไม่มีสื่อให้แสดง</p></div><button onClick={useDefaultArtwork} disabled={saving || loading || campaign?.type === 'artwork'} className="btn-ghost mt-4 w-full sm:mt-0 sm:w-auto disabled:cursor-not-allowed disabled:opacity-50">ใช้ Artwork เริ่มต้น</button></section>
     </div>
   )
 }

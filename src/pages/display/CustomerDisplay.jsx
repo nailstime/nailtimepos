@@ -150,7 +150,7 @@ export default function CustomerDisplay() {
   )
 
   if (!order) return (
-    <Screen>
+    <Screen fullBleed={Boolean(campaign?.path && campaign?.type !== 'artwork')}>
       <IdleSignage branch={branch} campaign={campaign} />
     </Screen>
   )
@@ -246,9 +246,9 @@ function DisplayPairing({ counterCode, pairingCode, busy, error, onCounterCodeCh
   )
 }
 
-function Screen({ children }) {
+function Screen({ children, fullBleed = false }) {
   return (
-    <div className="grid min-h-dvh place-items-center bg-[radial-gradient(circle_at_top_right,_rgba(169,79,97,0.10),_transparent_35%),linear-gradient(135deg,#f7f4f2_0%,#efe7e4_100%)] p-5 sm:p-8 lg:p-10">
+    <div className={fullBleed ? 'min-h-dvh bg-ink' : 'grid min-h-dvh place-items-center bg-[radial-gradient(circle_at_top_right,_rgba(169,79,97,0.10),_transparent_35%),linear-gradient(135deg,#f7f4f2_0%,#efe7e4_100%)] p-5 sm:p-8 lg:p-10'}>
       {children}
     </div>
   )
@@ -262,41 +262,42 @@ function IdleSignage({ branch, campaign }) {
   const isVideo = campaign?.type === 'video'
 
   return (
-    <section className="relative min-h-[calc(100dvh-4rem)] w-full max-w-[1520px] overflow-hidden rounded-[2rem] border border-white/75 bg-porcelain shadow-lift sm:rounded-[2.5rem]" aria-label="สื่อประชาสัมพันธ์ร้าน">
+    <section className={hasCampaignMedia ? 'relative h-dvh min-h-dvh w-full overflow-hidden bg-ink' : 'relative min-h-[calc(100dvh-4rem)] w-full max-w-[1520px] overflow-hidden rounded-[2rem] border border-white/75 bg-porcelain shadow-lift sm:rounded-[2.5rem]'} aria-label="สื่อประชาสัมพันธ์ร้าน">
       {hasCampaignMedia ? (
         <div className="absolute inset-0 bg-ink">
           {isVideo ? (
-            <video className="h-full w-full object-cover opacity-90" src={campaignMediaUrl} autoPlay muted loop playsInline aria-hidden="true" />
+            <video className="h-full w-full object-cover" src={campaignMediaUrl} autoPlay muted loop playsInline aria-hidden="true" />
           ) : (
-            <img className="h-full w-full object-cover opacity-90" src={campaignMediaUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
+            <img className="h-full w-full object-cover" src={campaignMediaUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-r from-ink/70 via-ink/25 to-transparent" />
         </div>
       ) : (
         <DefaultArtwork />
       )}
 
-      <div className={(hasCampaignMedia ? 'text-white' : 'text-ink') + ' relative flex min-h-[calc(100dvh-4rem)] flex-col p-7 sm:p-10 lg:p-14'}>
-        <header className="flex items-center justify-between gap-4">
-          <BrandMark compact inverse={hasCampaignMedia} />
-          <span className={(hasCampaignMedia ? 'border-white/30 bg-white/15 text-white' : 'badge-neutral') + ' rounded-full border px-3 py-1.5 text-xs font-semibold'}>{branch?.name || 'Nail Time & Spa'}</span>
-        </header>
+      {!hasCampaignMedia && (
+        <div className="relative flex min-h-[calc(100dvh-4rem)] flex-col p-7 text-ink sm:p-10 lg:p-14">
+          <header className="flex items-center justify-between gap-4">
+            <BrandMark compact />
+            <span className="badge-neutral rounded-full border px-3 py-1.5 text-xs font-semibold">{branch?.name || 'Nail Time & Spa'}</span>
+          </header>
 
-        <div className="my-auto max-w-3xl py-14 sm:py-20">
-          <p className={(hasCampaignMedia ? 'text-white/90' : 'text-rosedeep') + ' text-sm font-bold uppercase tracking-[0.22em]'}>Nail Time Member</p>
-          <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.06] tracking-tight sm:text-6xl lg:text-8xl">สวยในแบบคุณ<br />ทุกวัน</h1>
-          <p className={(hasCampaignMedia ? 'text-white/85' : 'text-sagegray') + ' mt-7 max-w-xl text-lg leading-8 sm:text-xl'}>สะสมยอดครบทุก ฿1,500 รับ 1 NTime เพื่อแลกบริการฟรี</p>
-          <div className={(hasCampaignMedia ? 'border-white/20 bg-white/10' : 'border-rose/15 bg-white/70') + ' mt-9 inline-flex items-center gap-3 rounded-2xl border px-5 py-4 backdrop-blur-sm'}>
-            <span className={(hasCampaignMedia ? 'bg-white text-rosedeep' : 'bg-rose text-white') + ' grid h-9 w-9 place-items-center rounded-xl text-sm font-bold'}>LINE</span>
-            <div><p className="text-xs font-semibold uppercase tracking-wider opacity-70">สิทธิพิเศษสำหรับสมาชิก</p><p className="mt-0.5 font-semibold">เพิ่มเพื่อน @nailtimetk22</p></div>
+          <div className="my-auto max-w-3xl py-14 sm:py-20">
+            <p className="text-sm font-bold uppercase tracking-[0.22em] text-rosedeep">Nail Time Member</p>
+            <h1 className="mt-5 font-display text-5xl font-semibold leading-[1.06] tracking-tight sm:text-6xl lg:text-8xl">สวยในแบบคุณ<br />ทุกวัน</h1>
+            <p className="mt-7 max-w-xl text-lg leading-8 text-sagegray sm:text-xl">สะสมยอดครบทุก ฿1,500 รับ 1 NTime เพื่อแลกบริการฟรี</p>
+            <div className="mt-9 inline-flex items-center gap-3 rounded-2xl border border-rose/15 bg-white/70 px-5 py-4 backdrop-blur-sm">
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-rose text-sm font-bold text-white">LINE</span>
+              <div><p className="text-xs font-semibold uppercase tracking-wider opacity-70">สิทธิพิเศษสำหรับสมาชิก</p><p className="mt-0.5 font-semibold">เพิ่มเพื่อน @nailtimetk22</p></div>
+            </div>
           </div>
-        </div>
 
-        <footer className={(hasCampaignMedia ? 'border-white/20 text-white/75' : 'border-mist text-sagegray') + ' flex items-center justify-between border-t pt-5 text-sm'}>
-          <span>Care in every detail</span>
-          <span>{hasCampaignMedia ? 'กำลังนำเสนอโปรโมชั่น' : 'โปรโมชั่นและสิทธิพิเศษ'}</span>
-        </footer>
-      </div>
+          <footer className="flex items-center justify-between border-t border-mist pt-5 text-sm text-sagegray">
+            <span>Care in every detail</span>
+            <span>โปรโมชั่นและสิทธิพิเศษ</span>
+          </footer>
+        </div>
+      )}
     </section>
   )
 }
