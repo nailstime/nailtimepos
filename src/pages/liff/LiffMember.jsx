@@ -14,6 +14,29 @@ export default function LiffMember() {
   const [busy, setBusy] = useState(false)
   const [needsClaimCode, setNeedsClaimCode] = useState(false)
 
+  async function functionErrorMessage(error) {
+    const context = error?.context
+    if (context?.clone) {
+      try {
+        const payload = await context.clone().json()
+        if (payload?.error) return String(payload.error)
+      } catch {
+        // The response is not JSON. Fall back to the SDK error below.
+      }
+    }
+    return String(error?.message || error || 'ไม่สามารถเชื่อมต่อบริการสมาชิกได้')
+  }
+
+  function friendlyErrorMessage(message) {
+    if (message === 'invalid_line_id_token' || message === 'invalid_line_identity' || message === 'line_identity_missing') {
+      return 'เซสชัน LINE หมดอายุหรือไม่ตรงกับ LIFF นี้ กรุณาเข้าสู่ระบบ LINE ใหม่แล้วลองอีกครั้ง'
+    }
+    if (message === 'too_many_requests') return 'ลองใหม่อีกครั้งในอีกครู่หนึ่ง'
+    if (message === 'rate_limit_unavailable') return 'ระบบสมาชิกกำลังตรวจสอบความปลอดภัย กรุณาลองใหม่อีกครั้ง'
+    if (message === 'server_not_configured') return 'ระบบสมาชิกยังตั้งค่าไม่ครบ กรุณาติดต่อร้าน'
+    return message
+  }
+
   async function callMemberApi(action, payload = {}) {
     const { data, error } = await supabase.functions.invoke('line-member', {
       body: { action, id_token: idToken, ...payload },
@@ -27,7 +50,10 @@ export default function LiffMember() {
     const { data, error } = await supabase.functions.invoke('line-member', {
       body: { action: 'me', id_token: token },
     })
-    if (error || data?.error) throw new Error(data?.error || error?.message || 'โหลดข้อมูลไม่สำเร็จ')
+    if (error || data?.error) {
+      const message = data?.error || await functionErrorMessage(error)
+      throw new Error(friendlyErrorMessage(message))
+    }
     if (!data.data) return setState('register')
     setMe(data.data)
     setState('ready')
@@ -52,6 +78,15 @@ export default function LiffMember() {
       }
     })()
   }, [])
+
+  async function restartLineSession() {
+    try {
+      if (liff.isLoggedIn()) liff.logout()
+      liff.login()
+    } catch {
+      window.location.reload()
+    }
+  }
 
   async function register() {
     if (!form.name || !form.phone || busy) return
@@ -104,7 +139,18 @@ export default function LiffMember() {
   }
 
   if (state === 'loading') return <Wrap><p className="text-sagegray">กำลังโหลด…</p></Wrap>
-  if (state === 'error') return <Wrap><p className="text-rosedeep">{err || 'เกิดข้อผิดพลาด'}</p></Wrap>
+  if (state === 'error') return (
+    <Wrap>
+      <div className="w-full max-w-md rounded-3xl border border-rose/20 bg-white p-6 text-center shadow-lift">
+        <p className="text-rosedeep">{err || 'เกิดข้อผิดพลาด'}</p>
+        {err.includes('เซสชัน LINE') && (
+          <button type="button" className="btn-rose mt-5 w-full" onClick={restartLineSession}>
+            เข้าสู่ระบบ LINE ใหม่
+          </button>
+        )}
+      </div>
+    </Wrap>
+  )
 
   if (state === 'register') return (
     <Wrap>
