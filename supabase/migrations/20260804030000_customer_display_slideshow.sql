@@ -45,7 +45,8 @@ begin
     if v_media_path is null then
       raise exception 'media file is required';
     end if;
-    if v_media_path !~ '^[A-Za-z0-9][A-Za-z0-9._/-]{0,500}$'
+    if length(v_media_path) > 500
+       or v_media_path !~ '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
        or v_media_path not like v_branch_code || '/%' then
       raise exception 'invalid media path';
     end if;
