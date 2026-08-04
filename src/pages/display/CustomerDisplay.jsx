@@ -286,7 +286,7 @@ function IdleSignage({ branch, campaign }) {
           {isVideo ? (
             <video className="h-full w-full object-cover" src={displayUrl} autoPlay muted loop playsInline aria-hidden="true" />
           ) : (
-            <img key={isSlideshow ? safeIdx : displayUrl} className="h-full w-full object-cover [animation:slideshow-fade_0.8s_ease-in-out]" src={displayUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
+            <img key={isSlideshow ? safeIdx : displayUrl} className="h-full w-full object-cover [animation:slideshow-fade_0.5s_ease-out]" src={displayUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
           )}
         </div>
       ) : (

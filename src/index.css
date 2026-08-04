@@ -83,7 +83,7 @@
 }
 .app-dialog-backdrop { animation: app-dialog-backdrop-in 160ms ease-out both; }
 .app-dialog-panel { animation: app-dialog-panel-in 220ms ease-out both; }
-@keyframes slideshow-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideshow-fade { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .print-only { display: none; }
 
 @media (min-width: 1024px) {
