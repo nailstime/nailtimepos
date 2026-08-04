@@ -7,7 +7,7 @@ import SettingsBackLink from '../../components/SettingsBackLink.jsx'
 const emptyBranch = { code: '', name: '', promptpay_id: '' }
 
 export default function BranchCounters() {
-  const { confirm } = useAppDialog()
+  const { confirm, prompt: openPrompt } = useAppDialog()
   const [branches, setBranches] = useState([])
   const [branch, setBranch] = useState(null)
   const [selectedBranchId, setSelectedBranchId] = useState('')
@@ -160,6 +160,47 @@ export default function BranchCounters() {
     setNotice(`สร้างรหัสจับคู่จอ ${data.code} แล้ว — กรอกบน PWA จอลูกค้าภายใน 10 นาที`)
   }
 
+  async function renameCounter(counter) {
+    const newCode = await openPrompt({
+      title: `เปลี่ยนชื่อ Counter ${counter.code}`,
+      description: 'ลิงก์จอลูกค้าเดิมจะใช้ไม่ได้หลังเปลี่ยนชื่อ — ต้องสร้าง token ใหม่และตั้งค่าจออีกครั้ง',
+      label: 'รหัส Counter ใหม่',
+      initialValue: counter.code,
+      placeholder: 'เช่น C3',
+      required: true,
+      maxLength: 20,
+      confirmLabel: 'เปลี่ยนชื่อ',
+      validate: (v) => /^[A-Z0-9_-]{1,20}$/i.test(v.trim()) ? null : 'ใช้ได้เฉพาะ A–Z, 0–9, _ หรือ - สูงสุด 20 ตัว',
+    })
+    if (newCode === null || newCode.trim().toUpperCase() === counter.code) return
+    setSaving(true); setError(''); setNotice(''); setSecret(null); setPairingSecret(null)
+    const { error: rpcError } = await supabase.rpc('rename_counter', {
+      p_counter: counter.id,
+      p_new_code: newCode.trim().toUpperCase(),
+    })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    setNotice(`เปลี่ยนชื่อ Counter เป็น ${newCode.trim().toUpperCase()} แล้ว — กด "สร้าง token ใหม่" เพื่ออัปเดต QR จอลูกค้า`)
+    await load(branch.id)
+  }
+
+  async function deleteCounter(counter) {
+    const approved = await confirm({
+      title: `ลบ Counter ${counter.code}`,
+      description: `Counter นี้และการจับคู่จอลูกค้าทั้งหมดจะถูกลบถาวร\n\nลบได้เฉพาะเมื่อไม่มีบิลเปิดอยู่`,
+      confirmLabel: 'ลบ Counter',
+      cancelLabel: 'ยกเลิก',
+      tone: 'danger',
+    })
+    if (!approved) return
+    setSaving(true); setError(''); setNotice(''); setSecret(null); setPairingSecret(null)
+    const { error: rpcError } = await supabase.rpc('delete_counter', { p_counter: counter.id })
+    setSaving(false)
+    if (rpcError) return setError(rpcError.message)
+    setNotice(`ลบ Counter ${counter.code} แล้ว`)
+    await load(branch.id)
+  }
+
   async function copyDisplayUrl() {
     try {
       await navigator.clipboard.writeText(displayUrl)
@@ -242,7 +283,7 @@ export default function BranchCounters() {
       <section className="card mt-5 overflow-hidden">
         <div className="flex items-center justify-between border-b border-mist px-5 py-4 sm:px-6"><div><p className="section-title">Counter ในสาขา {branch?.code || '—'}</p><p className="section-note">หมุน token เมื่อเปลี่ยนเครื่องจอลูกค้า หรือสงสัยว่าลิงก์เดิมรั่ว</p></div><span className="badge-neutral">{counters.length}</span></div>
         <div className="px-5 py-2 sm:px-6">
-          {counters.map((counter) => <div key={counter.id} className="data-row grid-cols-[minmax(0,1fr)_auto]"><div><p className="font-semibold">{counter.code}</p><p className="mt-1 text-xs text-sagegray">{counter.has_open_order ? 'กำลังมีบิลเปิดอยู่' : 'พร้อมรับบิล'}</p></div><div className="flex items-center gap-1"><button type="button" onClick={() => createPairingCode(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">รหัสจับคู่จอ</button><button type="button" onClick={() => rotateToken(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">สร้าง token ใหม่</button></div></div>)}
+          {counters.map((counter) => <div key={counter.id} className="data-row grid-cols-[minmax(0,1fr)_auto]"><div><p className="font-semibold">{counter.code}</p><p className="mt-1 text-xs text-sagegray">{counter.has_open_order ? 'กำลังมีบิลเปิดอยู่' : 'พร้อมรับบิล'}</p></div><div className="flex flex-wrap items-center justify-end gap-1"><button type="button" onClick={() => createPairingCode(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">รหัสจับคู่จอ</button><button type="button" onClick={() => rotateToken(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-rosedeep hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-50">สร้าง token ใหม่</button><button type="button" onClick={() => renameCounter(counter)} disabled={saving} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-sagegray hover:bg-porcelain hover:text-ink disabled:cursor-not-allowed disabled:opacity-50">เปลี่ยนชื่อ</button><button type="button" onClick={() => deleteCounter(counter)} disabled={saving || counter.has_open_order} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-danger hover:bg-danger/5 disabled:cursor-not-allowed disabled:opacity-50">ลบ</button></div></div>)}
           {!loading && counters.length === 0 && <div className="empty-state my-3">สาขานี้ยังไม่มี Counter — เพิ่ม Counter ด้านบนเพื่อเริ่มใช้งาน</div>}
         </div>
       </section>
