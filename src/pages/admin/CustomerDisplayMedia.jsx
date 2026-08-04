@@ -137,10 +137,13 @@ export default function CustomerDisplayMedia() {
   }
 
   async function deleteLibraryMedia(media) {
-    if (!media?.path || media.path === campaign?.path) return
+    if (!media?.path) return
+    const isActive = media.path === campaign?.path
     const accepted = await confirm({
       title: 'ลบสื่อจากคลัง',
-      description: `ลบ “${media.name}” ออกจากคลังอย่างถาวรหรือไม่? ไฟล์นี้จะไม่สามารถกู้คืนได้`,
+      description: isActive
+        ? `”${media.name}” กำลังแสดงอยู่บนจอลูกค้า เมื่อลบแล้วจะสลับกลับไปใช้ Artwork เริ่มต้นทันที`
+        : `ลบ “${media.name}” ออกจากคลังอย่างถาวรหรือไม่? ไฟล์นี้จะไม่สามารถกู้คืนได้`,
       confirmLabel: 'ลบไฟล์',
       cancelLabel: 'เก็บไว้',
       tone: 'danger',
@@ -149,11 +152,20 @@ export default function CustomerDisplayMedia() {
     setSaving(true)
     setError('')
     setNotice('')
+    if (isActive) {
+      const { error: rpcError } = await supabase.rpc('set_customer_display_media', { p_media_type: 'artwork', p_media_path: null })
+      if (rpcError) { setSaving(false); return setError(rpcError.message) }
+    }
     const { error: removeError } = await supabase.storage.from(BUCKET).remove([media.path])
     setSaving(false)
     if (removeError) return setError(removeError.message)
-    setCampaign((current) => ({ ...current, library: (current?.library || []).filter((item) => item.path !== media.path) }))
-    setNotice(`ลบ ${media.name} ออกจากคลังแล้ว`)
+    setCampaign((current) => ({
+      ...current,
+      type: isActive ? 'artwork' : current.type,
+      path: isActive ? null : current.path,
+      library: (current?.library || []).filter((item) => item.path !== media.path),
+    }))
+    setNotice(isActive ? `ลบ ${media.name} แล้ว — สลับกลับ Artwork เริ่มต้น` : `ลบ ${media.name} ออกจากคลังแล้ว`)
   }
 
   const activeUrl = publicUrl(campaign?.path)
@@ -192,7 +204,7 @@ export default function CustomerDisplayMedia() {
           const url = publicUrl(media.path)
           return <article key={media.path} className={(active ? 'border-rose ring-2 ring-rose/15' : 'border-mist') + ' overflow-hidden rounded-2xl border bg-white'}>
             <div className="relative aspect-video bg-ink">{media.type === 'video' ? <video className="h-full w-full object-cover" src={url} muted preload="metadata" aria-label={`วิดีโอ ${media.name}`} /> : <img className="h-full w-full object-cover" src={url} alt={`Artwork ${media.name}`} />}{active && <span className="absolute left-3 top-3 badge-rose">กำลังแสดง</span>}<span className="absolute right-3 top-3 rounded-full bg-ink/65 px-2.5 py-1 text-xs font-semibold text-white">{media.type === 'video' ? 'วิดีโอ' : 'ภาพ'}</span></div>
-            <div className="p-3.5"><p className="truncate font-semibold text-ink" title={media.name}>{media.name}</p><p className="mt-1 text-xs text-sagegray">{fileSize(media.size) || 'ไม่ทราบขนาด'}{media.created_at ? ` · ${new Date(media.created_at).toLocaleDateString('th-TH')}` : ''}</p><div className="mt-3 flex gap-2"><button onClick={() => useLibraryMedia(media)} disabled={saving || active} className="btn-ghost min-h-9 flex-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">{active ? 'กำลังใช้งาน' : 'ใช้ไฟล์นี้'}</button><button onClick={() => deleteLibraryMedia(media)} disabled={saving || active} className="btn-danger min-h-9 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">ลบ</button></div></div>
+            <div className="p-3.5"><p className="truncate font-semibold text-ink" title={media.name}>{media.name}</p><p className="mt-1 text-xs text-sagegray">{fileSize(media.size) || 'ไม่ทราบขนาด'}{media.created_at ? ` · ${new Date(media.created_at).toLocaleDateString('th-TH')}` : ''}</p><div className="mt-3 flex gap-2"><button onClick={() => useLibraryMedia(media)} disabled={saving || active} className="btn-ghost min-h-9 flex-1 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">{active ? 'กำลังใช้งาน' : 'ใช้ไฟล์นี้'}</button><button onClick={() => deleteLibraryMedia(media)} disabled={saving} className="btn-danger min-h-9 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50">ลบ</button></div></div>
           </article>
         })}</div>}
       </section>
