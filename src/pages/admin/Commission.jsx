@@ -8,6 +8,8 @@ const dateTimeLabel = (value) => value ? new Intl.DateTimeFormat('th-TH', {
   day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok',
 }).format(new Date(value)) : ''
 const editUntilLabel = (value) => value ? dateTimeLabel(new Date(new Date(value).getTime() - 60_000)) : ''
+const monthLabel = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }) }
+const shiftMonth = (m, delta) => { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 1 + delta, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 
 const defaultTiers = [{ max_amount: "", pct: "3" }]
 
@@ -111,7 +113,11 @@ export default function Commission() {
         <section className="card overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-mist px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div><p className="section-title">รายงานค่าคอม</p><p className="section-note">รายงานใช้ยอดสุทธิหลังหักส่วนลดและโปรโมชัน</p></div>
-            <input aria-label="เดือนรายงานค่าคอม" type="month" className="input sm:w-auto" value={month} onChange={(event) => setMonth(event.target.value)} />
+            <div className="flex items-center gap-1">
+              <button type="button" aria-label="เดือนก่อน" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="btn-ghost min-h-10 px-3 text-lg leading-none">‹</button>
+              <span className="min-w-[9rem] text-center text-sm font-semibold">{monthLabel(month)}</span>
+              <button type="button" aria-label="เดือนถัดไป" onClick={() => setMonth((m) => shiftMonth(m, 1))} disabled={month >= thisMonth()} className="btn-ghost min-h-10 px-3 text-lg leading-none">›</button>
+            </div>
           </div>
           <div className="p-5">
             {!report && <div className="empty-state">กำลังโหลดรายงาน…</div>}
