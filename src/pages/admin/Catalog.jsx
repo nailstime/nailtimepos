@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabase"
-import { baht } from "../../lib/format"
+import { baht, bangkokDateTime } from "../../lib/format"
 import { useAppDialog } from "../../components/AppDialog.jsx"
 import SettingsBackLink from "../../components/SettingsBackLink.jsx"
 
@@ -13,6 +13,9 @@ export default function Catalog() {
   const [form, setForm] = useState({ kind: "service", category_id: "", name: "", price: "", counts: true })
   const [promotionForm, setPromotionForm] = useState({ name: "", discount_type: "percent", discount_value: "", min_subtotal: "" })
   const [error, setError] = useState("")
+  const [selectedProductId, setSelectedProductId] = useState(null)
+  const [productHistory, setProductHistory] = useState(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   async function load() {
     const results = await Promise.all([
@@ -261,6 +264,21 @@ export default function Catalog() {
     load()
   }
 
+  async function openProductDetail(product) {
+    setSelectedProductId(product.id)
+    setProductHistory(null)
+    setHistoryLoading(true)
+    const { data, error: rpcError } = await supabase.rpc('get_product_stock_history', { p_product_id: product.id })
+    setHistoryLoading(false)
+    if (rpcError) return
+    setProductHistory(data?.movements || [])
+  }
+
+  function closeProductDetail() {
+    setSelectedProductId(null)
+    setProductHistory(null)
+  }
+
   const categoriesFor = (kind) => categories.filter((category) => category.kind === kind)
   const categoryName = (categoryId) => categories.find((category) => category.id === categoryId)?.name || ''
 
@@ -347,7 +365,7 @@ export default function Catalog() {
 
     return <>
     <div className={"grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-mist py-2.5 text-sm last:border-0 " + (isProduct ? "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto_auto]" : "sm:grid-cols-[minmax(0,1fr)_80px_auto_auto_auto_auto]")}>
-      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}><span className="truncate">{it.name}</span>{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{!isProduct && <span className={(it.is_bookable ? 'badge-success' : 'badge-neutral') + ' shrink-0 no-underline'}>{it.is_bookable ? 'จองออนไลน์' : 'ไม่แสดงจอง'}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
+      <span className={"flex min-w-0 items-center gap-2 font-semibold " + (!isActive ? "line-through text-sagegray" : "")}>{isProduct ? <button type="button" onClick={() => openProductDetail(it)} className="truncate text-left hover:text-rosedeep hover:underline underline-offset-2">{it.name}</button> : <span className="truncate">{it.name}</span>}{categoryName(it.category_id) && <span className="badge-neutral shrink-0 no-underline">{categoryName(it.category_id)}</span>}{!isProduct && <span className={(it.is_bookable ? 'badge-success' : 'badge-neutral') + ' shrink-0 no-underline'}>{it.is_bookable ? 'จองออนไลน์' : 'ไม่แสดงจอง'}</span>}{isProduct && <span className={(Number(it.stock_qty) <= Number(it.low_stock_alert) ? "bg-danger/10 text-danger" : "badge-success") + " shrink-0 rounded-full px-2 py-1 text-xs font-bold no-underline"}>stock {it.stock_qty}</span>}</span>
       <span className="text-right font-bold tabular-nums">{isVariablePrice ? `฿${baht(it.min_price)}–${baht(it.max_price)}` : `฿${baht(it.price)}`}</span>
       {isProduct && (
         <div className="flex items-center justify-end gap-1"><button onClick={() => receiveStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-rosedeep hover:bg-rose/10">รับเข้า</button><button onClick={() => adjustStock(it)} className="min-h-9 rounded-lg px-1.5 text-xs font-semibold text-danger hover:bg-danger/5">ตัด</button></div>
@@ -430,7 +448,65 @@ export default function Catalog() {
     </>
   }
 
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || null
+
+  const mvTypeMeta = {
+    purchase: { label: 'รับเข้า',    cls: 'badge-success' },
+    sale:     { label: 'ขาย',        cls: 'badge-rose' },
+    adjust:   { label: 'ปรับสต็อก', cls: 'badge-neutral' },
+    void:     { label: 'ยกเลิก',    cls: 'badge-neutral' },
+  }
+
   return (
+    <>
+    {selectedProductId && (
+      <>
+        <div className="fixed inset-0 z-40 bg-ink/20" onClick={closeProductDetail} />
+        <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-white shadow-xl sm:max-w-md">
+          <div className="flex items-start justify-between border-b border-mist px-5 py-4">
+            <div className="min-w-0 pr-3">
+              <p className="page-eyebrow text-xs">สินค้า</p>
+              <h2 className="mt-0.5 truncate text-lg font-semibold leading-snug">{selectedProduct?.name}</h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="font-bold tabular-nums" style={{ color: 'var(--color-rose-deep)' }}>฿{baht(selectedProduct?.price)}</span>
+                {selectedProduct && (
+                  <span className={"rounded-full px-2.5 py-1 text-xs font-bold " + (Number(selectedProduct.stock_qty) <= Number(selectedProduct.low_stock_alert) ? "bg-danger/10 text-danger" : "bg-success/10 text-success")}>
+                    stock {selectedProduct.stock_qty}
+                  </span>
+                )}
+                {selectedProduct && !selectedProduct.active && <span className="badge-neutral">ปิดแล้ว</span>}
+              </div>
+            </div>
+            <button onClick={closeProductDetail} aria-label="ปิด" className="btn-ghost min-h-9 shrink-0 px-3 text-base leading-none">×</button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <p className="px-5 pb-2 pt-4 text-sm font-bold" style={{ color: 'var(--color-ink)' }}>ประวัติเคลื่อนไหวสต็อก</p>
+            {historyLoading && <p className="px-5 py-6 text-sm" style={{ color: 'var(--color-sage-gray)' }}>กำลังโหลด…</p>}
+            {!historyLoading && productHistory?.length === 0 && (
+              <div className="empty-state mx-5 my-3">ยังไม่มีประวัติการเคลื่อนไหว</div>
+            )}
+            {!historyLoading && productHistory?.map((mv) => (
+              <div key={mv.id} className="border-b border-mist px-5 py-3 last:border-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className={(mvTypeMeta[mv.type]?.cls || 'badge-neutral')}>{mvTypeMeta[mv.type]?.label || mv.type}</span>
+                    <span className={"text-sm font-bold tabular-nums " + (mv.qty > 0 ? "text-success" : "text-danger")}>
+                      {mv.qty > 0 ? '+' : ''}{mv.qty}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-xs" style={{ color: 'var(--color-sage-gray)' }}>{bangkokDateTime(mv.created_at)}</span>
+                </div>
+                <div className="mt-1.5 space-y-0.5 text-xs" style={{ color: 'var(--color-sage-gray)' }}>
+                  {mv.staff_name && <p>{mv.staff_name}</p>}
+                  {mv.order_no && <p>บิล #{mv.order_no}{mv.member_name ? ` · ${mv.member_name}` : ''}</p>}
+                  {mv.note && <p className="italic">{mv.note}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </>
+    )}
     <div className="w-full">
       <SettingsBackLink />
       <div className="page-heading">
@@ -514,5 +590,6 @@ export default function Catalog() {
       </section>
       </div>
     </div>
+    </>
   )
 }
