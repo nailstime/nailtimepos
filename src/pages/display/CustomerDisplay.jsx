@@ -150,7 +150,10 @@ export default function CustomerDisplay() {
   )
 
   if (!order) return (
-    <Screen fullBleed={Boolean(campaign?.path && campaign?.type !== 'artwork')}>
+    <Screen fullBleed={Boolean(
+      (campaign?.path && campaign?.type !== 'artwork') ||
+      (campaign?.type === 'slideshow' && campaign?.slideshow_paths?.length > 0)
+    )}>
       <IdleSignage branch={branch} campaign={campaign} />
     </Screen>
   )
@@ -255,20 +258,35 @@ function Screen({ children, fullBleed = false }) {
 }
 
 function IdleSignage({ branch, campaign }) {
-  const campaignMediaUrl = campaign?.path
-    ? supabase.storage.from(CUSTOMER_DISPLAY_BUCKET).getPublicUrl(campaign.path).data.publicUrl
-    : ''
-  const hasCampaignMedia = Boolean(campaignMediaUrl && campaign?.type !== 'artwork')
-  const isVideo = campaign?.type === 'video'
+  const [slideIdx, setSlideIdx] = useState(0)
+  const slidePaths = campaign?.slideshow_paths || []
+  const slideInterval = campaign?.slideshow_interval || 5000
+  const isSlideshow = campaign?.type === 'slideshow' && slidePaths.length > 0
+
+  useEffect(() => {
+    if (!isSlideshow || slidePaths.length <= 1) { setSlideIdx(0); return }
+    const t = setInterval(() => setSlideIdx((i) => (i + 1) % slidePaths.length), slideInterval)
+    return () => clearInterval(t)
+  }, [isSlideshow, slidePaths.length, slideInterval])
+
+  useEffect(() => { setSlideIdx(0) }, [slidePaths.join(',')])
+
+  const safeIdx = Math.min(slideIdx, Math.max(slidePaths.length - 1, 0))
+  const displayUrl = isSlideshow
+    ? supabase.storage.from(CUSTOMER_DISPLAY_BUCKET).getPublicUrl(slidePaths[safeIdx]).data.publicUrl
+    : (campaign?.path ? supabase.storage.from(CUSTOMER_DISPLAY_BUCKET).getPublicUrl(campaign.path).data.publicUrl : '')
+
+  const hasCampaignMedia = isSlideshow ? Boolean(displayUrl) : Boolean(displayUrl && campaign?.type !== 'artwork')
+  const isVideo = !isSlideshow && campaign?.type === 'video'
 
   return (
     <section className={hasCampaignMedia ? 'relative h-dvh min-h-dvh w-full overflow-hidden bg-ink' : 'relative min-h-[calc(100dvh-4rem)] w-full max-w-[1520px] overflow-hidden rounded-[2rem] border border-white/75 bg-porcelain shadow-lift sm:rounded-[2.5rem]'} aria-label="สื่อประชาสัมพันธ์ร้าน">
       {hasCampaignMedia ? (
         <div className="absolute inset-0 bg-ink">
           {isVideo ? (
-            <video className="h-full w-full object-cover" src={campaignMediaUrl} autoPlay muted loop playsInline aria-hidden="true" />
+            <video className="h-full w-full object-cover" src={displayUrl} autoPlay muted loop playsInline aria-hidden="true" />
           ) : (
-            <img className="h-full w-full object-cover" src={campaignMediaUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
+            <img key={isSlideshow ? safeIdx : displayUrl} className="h-full w-full object-cover [animation:slideshow-fade_0.8s_ease-in-out]" src={displayUrl} alt="สื่อประชาสัมพันธ์ Nail Time & Spa" />
           )}
         </div>
       ) : (
