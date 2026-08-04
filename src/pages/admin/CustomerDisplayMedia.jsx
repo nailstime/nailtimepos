@@ -152,14 +152,9 @@ export default function CustomerDisplayMedia() {
     setSaving(true)
     setError('')
     setNotice('')
-    if (isActive) {
-      const { error: rpcError } = await supabase.rpc('set_customer_display_media', { p_media_type: 'artwork', p_media_path: null })
-      if (rpcError) { setSaving(false); return setError(rpcError.message) }
-    }
-    const { data: removed, error: removeError } = await supabase.storage.from(BUCKET).remove([media.path])
+    const { error: rpcError } = await supabase.rpc('owner_delete_display_media', { p_media_path: media.path })
     setSaving(false)
-    if (removeError) return setError(removeError.message)
-    if (!removed?.length) return setError('ลบไฟล์ไม่สำเร็จ — ไม่มีสิทธิ์หรือพบปัญหาจาก RLS กรุณาติดต่อผู้ดูแล')
+    if (rpcError) return setError(rpcError.message)
     setCampaign((current) => ({
       ...current,
       type: isActive ? 'artwork' : current.type,
