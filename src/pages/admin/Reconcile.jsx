@@ -463,16 +463,18 @@ function AdjustmentModal({ kind, busy, onClose, onSave }) {
         ["owner_deposit",   "เงินนำเข้าบัญชี (Owner)"],
       ]
     : [
-        ["water",           "ค่าน้ำ"],
-        ["electricity",     "ค่าไฟ"],
-        ["internet",        "ค่าอินเตอร์เนต"],
-        ["phone",           "ค่าโทรศัพท์"],
-        ["product_cost",    "ต้นทุนสินค้า"],
-        ["service_cost",    "ต้นทุนค่าบริการ"],
-        ["regular_expense", "รายจ่ายประจำ"],
-        ["other_expense",   "รายจ่ายอื่นๆ"],
-        ["interest_fee",    "ดอกเบี้ย/ค่าธรรมเนียม"],
-        ["refund",          "คืนเงินลูกค้า"],
+        ["water",               "ค่าน้ำ"],
+        ["electricity",         "ค่าไฟ"],
+        ["internet",            "ค่าอินเตอร์เนต"],
+        ["phone",               "ค่าโทรศัพท์"],
+        ["product_cost",        "ต้นทุนสินค้า"],
+        ["service_cost",        "ต้นทุนค่าบริการ"],
+        ["salary",              "เงินเดือน"],
+        ["commission_expense",  "ค่าคอมมิชชั่น"],
+        ["regular_expense",     "รายจ่ายประจำ"],
+        ["other_expense",       "รายจ่ายอื่นๆ"],
+        ["interest_fee",        "ดอกเบี้ย/ค่าธรรมเนียม"],
+        ["refund",              "คืนเงินลูกค้า"],
       ]
 
   return createPortal(
