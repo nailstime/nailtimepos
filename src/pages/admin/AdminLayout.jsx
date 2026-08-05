@@ -5,6 +5,7 @@ import { BrandMark } from "../../components/Brand.jsx"
 const tabs = [
   { to: "/admin", label: "Dashboard", end: true },
   { to: "/admin/reconcile", label: "Reconcile" },
+  { to: "/admin/pl-report", label: "P&L" },
   { to: "/admin/receipts", label: "ประวัติบิล" },
   { to: "/admin/customers", label: "ลูกค้า · Owner" },
   { to: "/admin/approvals", label: "คิวอนุมัติ" },

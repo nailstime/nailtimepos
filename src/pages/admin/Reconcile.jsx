@@ -421,7 +421,7 @@ function AdjustmentModal({ kind, busy, onClose, onSave }) {
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [occurredAt, setOccurredAt] = useState(bangkokLocalInput())
-  const [category, setCategory] = useState(isIncome ? "other_income" : "shop_expense")
+  const [category, setCategory] = useState(isIncome ? "other_income" : "other_expense")
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -456,8 +456,24 @@ function AdjustmentModal({ kind, busy, onClose, onSave }) {
   }
 
   const categories = isIncome
-    ? [["other_income", "รายรับอื่น"], ["rent", "ค่าเช่า"], ["owner_deposit", "เงินนำเข้าบัญชี"]]
-    : [["shop_expense", "ค่าใช้จ่ายร้าน"], ["supplies", "วัตถุดิบ/น้ำยาทาเล็บ"], ["refund", "คืนเงินลูกค้า"], ["bank_fee", "ค่าธรรมเนียมธนาคาร"]]
+    ? [
+        ["other_income",    "รายรับอื่น"],
+        ["rent_received",   "ค่าเช่า"],
+        ["interest_income", "ดอกเบี้ยรับ"],
+        ["owner_deposit",   "เงินนำเข้าบัญชี (Owner)"],
+      ]
+    : [
+        ["water",           "ค่าน้ำ"],
+        ["electricity",     "ค่าไฟ"],
+        ["internet",        "ค่าอินเตอร์เนต"],
+        ["phone",           "ค่าโทรศัพท์"],
+        ["product_cost",    "ต้นทุนสินค้า"],
+        ["service_cost",    "ต้นทุนค่าบริการ"],
+        ["regular_expense", "รายจ่ายประจำ"],
+        ["other_expense",   "รายจ่ายอื่นๆ"],
+        ["interest_fee",    "ดอกเบี้ย/ค่าธรรมเนียม"],
+        ["refund",          "คืนเงินลูกค้า"],
+      ]
 
   return createPortal(
     <div className="app-dialog-backdrop fixed inset-0 z-[1000] grid place-items-center overflow-y-auto bg-ink/45 px-4 py-6 backdrop-blur-[3px]" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>

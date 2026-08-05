@@ -25,6 +25,7 @@ const CustomerDetail = lazy(() => import('./pages/admin/CustomerDetail.jsx'))
 const CustomerDisplayMedia = lazy(() => import('./pages/admin/CustomerDisplayMedia.jsx'))
 const SystemSettings = lazy(() => import('./pages/admin/SystemSettings.jsx'))
 const BranchCounters = lazy(() => import('./pages/admin/BranchCounters.jsx'))
+const PLReport = lazy(() => import('./pages/admin/PLReport.jsx'))
 const LiffMember = lazy(() => import('./pages/liff/LiffMember.jsx'))
 const LiffBooking = lazy(() => import('./pages/liff/LiffBooking.jsx'))
 
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/admin" element={<RequireStaff ownerOnly><AdminLayout /></RequireStaff>}>
             <Route index element={<Dashboard />} />
             <Route path="reconcile" element={<Reconcile />} />
+            <Route path="pl-report" element={<PLReport />} />
             <Route path="approvals" element={<Approvals />} />
             <Route path="receipts" element={<Receipts />} />
             <Route path="receipts/:orderId" element={<ReceiptDetail />} />
