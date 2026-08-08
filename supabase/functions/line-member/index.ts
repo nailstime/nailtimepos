@@ -73,6 +73,19 @@ Deno.serve(async (req) => {
       if (error) throw error
       return json(req, { result: data })
     }
+    if (body.action === "rewards") {
+      const branchCode = Deno.env.get("DEFAULT_BRANCH_CODE") || "MAIN"
+      const { data: branch } = await admin.from("branches").select("id").eq("code", branchCode).single()
+      if (!branch) return json(req, { data: [] })
+      const { data, error } = await admin.from("rewards")
+        .select("name, points_cost, description")
+        .eq("branch_id", branch.id)
+        .eq("active", true)
+        .eq("terminated", false)
+        .order("points_cost")
+      if (error) throw new Error("rewards_unavailable")
+      return json(req, { data: data ?? [] })
+    }
     return json(req, { error: "invalid_action" }, 400)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

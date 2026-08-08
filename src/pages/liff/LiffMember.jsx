@@ -10,6 +10,8 @@ export default function LiffMember() {
   const [idToken, setIdToken] = useState(null)
   const [me, setMe] = useState(null)
   const [bookings, setBookings] = useState(null)
+  const [rewards, setRewards] = useState(null)
+  const [showPrivileges, setShowPrivileges] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', claimCode: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -65,6 +67,14 @@ export default function LiffMember() {
       body: { action: 'my_bookings', id_token: token },
     })
     if (data?.data) setBookings(data.data)
+    else setBookings([])
+  }
+
+  async function loadRewards(token) {
+    const { data } = await supabase.functions.invoke('line-member', {
+      body: { action: 'rewards', id_token: token },
+    })
+    if (data?.data) setRewards(data.data)
   }
 
   useEffect(() => {
@@ -79,7 +89,7 @@ export default function LiffMember() {
         const profile = await liff.getProfile()
         setIdToken(token)
         setForm((f) => ({ ...f, name: profile.displayName }))
-        await Promise.all([loadMe(token), loadBookings(token)])
+        await Promise.all([loadMe(token), loadBookings(token), loadRewards(token)])
       } catch (e) {
         setErr(String(e.message || e))
         setState('error')
@@ -267,9 +277,14 @@ export default function LiffMember() {
               </div>
             </div>
 
-            <button type="button" onClick={openBooking} className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-white/25 bg-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
-              จองคิวออนไลน์
-            </button>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button type="button" onClick={openBooking} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/25 bg-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/25">
+                จองคิวออนไลน์
+              </button>
+              <button type="button" onClick={() => setShowPrivileges(true)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/25 bg-white/15 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/25">
+                สิทธิพิเศษ NTime
+              </button>
+            </div>
           </div>
         </section>
 
@@ -307,23 +322,15 @@ export default function LiffMember() {
           </div>
           <div className="divide-y divide-mist px-5 sm:px-6">
             {bookings === null && <div className="py-8 text-center text-sm text-sagegray">กำลังโหลด…</div>}
-            {bookings !== null && bookings.upcoming.length === 0 && (
+            {bookings !== null && bookings.length === 0 && (
               <div className="py-8 text-center">
                 <p className="font-medium text-ink">ยังไม่มีคิวที่จอง</p>
                 <p className="mt-1 text-sm text-sagegray">กดปุ่มด้านบนเพื่อจองคิวออนไลน์</p>
               </div>
             )}
-            {bookings !== null && bookings.upcoming.map((b) => (
+            {bookings !== null && bookings.map((b) => (
               <BookingRow key={b.booking_no} booking={b} />
             ))}
-            {bookings !== null && bookings.recent.length > 0 && (
-              <>
-                <div className="py-2 text-xs font-semibold uppercase tracking-wider text-sagegray/60">ประวัติล่าสุด</div>
-                {bookings.recent.map((b) => (
-                  <BookingRow key={b.booking_no} booking={b} dim />
-                ))}
-              </>
-            )}
           </div>
         </section>
 
@@ -360,6 +367,35 @@ export default function LiffMember() {
           )}
         </section>
       </div>
+      {showPrivileges && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40 backdrop-blur-[2px]" onClick={() => setShowPrivileges(false)}>
+          <div className="rounded-t-3xl bg-white shadow-lift" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-mist px-5 py-4">
+              <div>
+                <p className="font-display text-lg font-semibold text-ink">สิทธิพิเศษ NTime</p>
+                <p className="mt-0.5 text-sm text-sagegray">รายการที่ใช้ NTime แลกได้</p>
+              </div>
+              <button type="button" onClick={() => setShowPrivileges(false)} className="grid h-9 w-9 place-items-center rounded-xl text-xl text-sagegray hover:bg-porcelain">×</button>
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto px-5 pb-8 pt-3">
+              {rewards === null && <p className="py-6 text-center text-sm text-sagegray">กำลังโหลด…</p>}
+              {rewards !== null && rewards.length === 0 && <p className="py-6 text-center text-sm text-sagegray">ยังไม่มีรายการสิทธิพิเศษ</p>}
+              {rewards !== null && rewards.map((r, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 border-b border-mist py-4 last:border-b-0">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{r.name}</p>
+                    {r.description && <p className="mt-0.5 text-sm text-sagegray">{r.description}</p>}
+                  </div>
+                  <span className="shrink-0 rounded-full bg-rose/10 px-3 py-1 text-sm font-bold text-rosedeep">{r.points_cost} NTime</span>
+                </div>
+              ))}
+              <div className="mt-4 rounded-2xl bg-porcelain px-4 py-3 text-sm leading-6 text-sagegray">
+                NTime สะสมอัตโนมัติทุกครั้งที่ชำระเงิน ทุก ฿{me?.threshold ? Number(me.threshold).toLocaleString('th-TH') : '1,500'} รับ 1 NTime
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Wrap>
   )
 }
