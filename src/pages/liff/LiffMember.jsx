@@ -390,7 +390,7 @@ export default function LiffMember() {
                 </div>
               ))}
               <div className="mt-4 rounded-2xl bg-porcelain px-4 py-3 text-sm leading-6 text-sagegray">
-                NTime สะสมอัตโนมัติทุกครั้งที่ชำระเงิน ทุก ฿{me?.threshold ? Number(me.threshold).toLocaleString('th-TH') : '1,500'} รับ 1 NTime
+                NTime สะสมอัตโนมัติทุกครั้งที่ชำระเงิน ทุก ฿{Number(me.threshold).toLocaleString('th-TH')} รับ 1 NTime
               </div>
             </div>
           </div>
