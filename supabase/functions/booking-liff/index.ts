@@ -124,6 +124,29 @@ Deno.serve(async (req) => {
       return json(req, { data: result.slots })
     }
 
+    if (body.action === "my_bookings") {
+      const { date: today } = bangkokNow()
+      const [upcomingResult, recentResult] = await Promise.all([
+        admin.from("bookings")
+          .select("booking_no, slot_date, start_time, end_time, status, service_ids, service:service_id(name)")
+          .eq("guest_line_uid", profile.sub)
+          .in("status", ["pending", "confirmed"])
+          .gte("slot_date", today)
+          .order("slot_date", { ascending: true })
+          .order("start_time", { ascending: true })
+          .limit(10),
+        admin.from("bookings")
+          .select("booking_no, slot_date, start_time, end_time, status, service_ids, service:service_id(name)")
+          .eq("guest_line_uid", profile.sub)
+          .or(`slot_date.lt.${today},status.in.(completed,cancelled)`)
+          .order("slot_date", { ascending: false })
+          .order("start_time", { ascending: false })
+          .limit(5),
+      ])
+      if (upcomingResult.error || recentResult.error) throw new Error("bookings_unavailable")
+      return json(req, { data: { upcoming: upcomingResult.data ?? [], recent: recentResult.data ?? [] } })
+    }
+
     if (body.action === "book") {
       const slotId = String(body.slot_id || "")
       const date = String(body.date || "")

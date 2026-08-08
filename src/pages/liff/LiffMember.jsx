@@ -9,6 +9,7 @@ export default function LiffMember() {
   const [state, setState] = useState('loading') // loading | register | ready | error
   const [idToken, setIdToken] = useState(null)
   const [me, setMe] = useState(null)
+  const [bookings, setBookings] = useState(null)
   const [form, setForm] = useState({ name: '', phone: '', claimCode: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -59,6 +60,13 @@ export default function LiffMember() {
     setState('ready')
   }
 
+  async function loadBookings(token) {
+    const { data } = await supabase.functions.invoke('booking-liff', {
+      body: { action: 'my_bookings', id_token: token },
+    })
+    if (data?.data) setBookings(data.data)
+  }
+
   useEffect(() => {
     ;(async () => {
       try {
@@ -71,7 +79,7 @@ export default function LiffMember() {
         const profile = await liff.getProfile()
         setIdToken(token)
         setForm((f) => ({ ...f, name: profile.displayName }))
-        await loadMe(token)
+        await Promise.all([loadMe(token), loadBookings(token)])
       } catch (e) {
         setErr(String(e.message || e))
         setState('error')
@@ -288,6 +296,38 @@ export default function LiffMember() {
         )}
 
         <section className={`card overflow-hidden ${hasPending ? 'lg:col-span-2' : ''}`}>
+          <div className="flex items-center justify-between border-b border-mist px-5 py-4 sm:px-6">
+            <div>
+              <p className="section-title">คิวนัดของฉัน</p>
+              <p className="mt-1 text-sm text-sagegray">การจองที่กำลังจะมาถึง</p>
+            </div>
+            <button type="button" onClick={openBooking} className="rounded-xl border border-mist bg-white px-3 py-2 text-xs font-semibold text-sagegray hover:text-ink">
+              + จองคิว
+            </button>
+          </div>
+          <div className="divide-y divide-mist px-5 sm:px-6">
+            {bookings === null && <div className="py-8 text-center text-sm text-sagegray">กำลังโหลด…</div>}
+            {bookings !== null && bookings.upcoming.length === 0 && (
+              <div className="py-8 text-center">
+                <p className="font-medium text-ink">ยังไม่มีคิวที่จอง</p>
+                <p className="mt-1 text-sm text-sagegray">กดปุ่มด้านบนเพื่อจองคิวออนไลน์</p>
+              </div>
+            )}
+            {bookings !== null && bookings.upcoming.map((b) => (
+              <BookingRow key={b.booking_no} booking={b} />
+            ))}
+            {bookings !== null && bookings.recent.length > 0 && (
+              <>
+                <div className="py-2 text-xs font-semibold uppercase tracking-wider text-sagegray/60">ประวัติล่าสุด</div>
+                {bookings.recent.map((b) => (
+                  <BookingRow key={b.booking_no} booking={b} dim />
+                ))}
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className={`card overflow-hidden ${hasPending ? 'lg:col-span-2' : ''}`}>
           <div className="flex items-center justify-between border-b border-mist px-5 py-5 sm:px-6">
             <div>
               <p className="section-title">ประวัติ NTime ล่าสุด</p>
@@ -340,4 +380,36 @@ function formatHistoryDate(value) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'รายการล่าสุด'
   return new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(date)
+}
+
+function formatBookingDate(dateStr) {
+  const date = new Date(dateStr + 'T00:00:00')
+  return new Intl.DateTimeFormat('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(date)
+}
+
+const STATUS_CONFIG = {
+  pending:   { label: 'รอยืนยัน',    cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  confirmed: { label: 'ยืนยันแล้ว',  cls: 'bg-success/10 text-success border border-success/20' },
+  completed: { label: 'เสร็จแล้ว',   cls: 'bg-porcelain text-sagegray border border-mist' },
+  cancelled: { label: 'ยกเลิก',      cls: 'bg-danger/5 text-danger border border-danger/15' },
+}
+
+function BookingRow({ booking: b, dim }) {
+  const status = STATUS_CONFIG[b.status] || STATUS_CONFIG.pending
+  const extraServices = Array.isArray(b.service_ids) ? b.service_ids.length - 1 : 0
+  const serviceName = b.service?.name || 'บริการ'
+  return (
+    <div className={`flex items-start justify-between gap-3 py-4 ${dim ? 'opacity-55' : ''}`}>
+      <div className="min-w-0">
+        <p className={`font-semibold ${dim ? 'text-sagegray' : 'text-ink'}`}>
+          {serviceName}{extraServices > 0 ? ` +${extraServices}` : ''}
+        </p>
+        <p className="mt-0.5 text-sm text-sagegray">
+          {formatBookingDate(b.slot_date)} · {b.start_time.slice(0, 5)}–{b.end_time.slice(0, 5)} น.
+        </p>
+        <p className="mt-0.5 text-xs text-sagegray/70">#{b.booking_no}</p>
+      </div>
+      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.cls}`}>{status.label}</span>
+    </div>
+  )
 }
